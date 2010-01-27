@@ -35,7 +35,6 @@ struct
       done;
       r
 end
-;;
 
 let piece_chars = [(King, 'K'); (Queen, 'Q'); (Rook, 'R'); (Bishop, 'B'); (Knight, 'N'); (Pawn, 'P')]
 
@@ -79,7 +78,15 @@ let mouvements =
   ]
 ;;
 
-let is_valid_mouvement ch ycolor (a,b) (a', b') = 
+let rec is_empty_path ch (a, b) (a', b') (x, y) dist i = 
+  if i = dist then true
+  else
+    if ch.(i*x+a).(i*y+b) <> Empty then false
+    else
+      is_empty_path  ch (a, b) (a', b') (x, y) dist (i+1)
+
+;;
+let is_valid_mouvement ch ycolor (a,b) (a', b') p_prom = 
   let piece_dep = ch.(a).(b) in
     (* la piece a bouger et sa destination sont dans l'echequier *)
     if not (in_board a b) && (in_board a' b') then (false, None)
@@ -89,34 +96,28 @@ let is_valid_mouvement ch ycolor (a,b) (a', b') =
     else if (try Aux.color ch.(a').(b') = ycolor with _ -> false) then (false, None)
     else
       match piece_dep with
-	| Piece(Pawn, White) -> 
+	| Piece(Pawn, col) -> 
 	    (* Si il y a une promotion du pion *)
-	    let prom = b'= 7 in 
-	    (*Si il n'y a pas de piece adverse *)
-	    if ch.(a').(b') = Empty then 
-	      if a' <> a then (false, None)
-		(* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
-	      else if b = 1 && (b' = 2 || b' = 3) then (true, Some (Dep((a, b), (a', b'))))
-		(* Sinon on ne peut avance que de 1*)
-	      else if (b'-b) = 1 then 
-		if prom then (true, Some (Prom((a, b), (a', b'), Queen))) else (true, Some (Dep((a, b), (a', b'))))
+	    let prom = b'= (if col = White then 7 else 0) in 
+	      (*Si il n'y a pas de piece adverse *)
+	      if ch.(a').(b') = Empty then 
+		if a' <> a then (false, None)
+		  (* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
+		else if 
+		  (col = White && b = 1 && b' = 3 && ch.(a).(b+1) = Empty)
+		  || (col = Black && b = 6 && b' = 4 && ch.(a).(b-1) = Empty)
+		then (true, Some (Dep((a, b), (a', b'))))
+		  (* Sinon on ne peut avance que de 1*)
+		else if (if col = White then b'-b else b-b') = 1 then
+		  if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
+		else (false, None)
+		  (* Sinon on peut manger une piece sur les cotés *)
+	      else if 
+		if col = White then (b'-b = 1) && (a'-a = 1 || a'-a = -1)
+		else  (b-b' = 1) && (a-a' = 1 || a-a' = -1)
+	      then 
+		if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
 	      else (false, None)
-		(* Sinon on peut manger une piece sur les cotés *)
-	    else if (b'-b = 1) && (a'-a = 1 || a'-a = -1) then 
-	      if prom then (true, Some (Prom((a, b), (a', b'), Queen))) else (true, Some (Dep((a, b), (a', b'))))
-	    else (false, None)
-	| Piece(Pawn, Black) -> 
-	    (*Si il n'y a pas de piece adverse *)
-	    if ch.(a').(b') = Empty then 
-	      if a' <> a then (false, None)
-		(* Si on est sur la ligne 6 on peut aller soit a la ligne 5 soit à la ligne 4 *)
-	      else if b = 6 && (b' = 5 || b' = 4) then (true, Some (Dep((a, b), (a', b'))))
-		(* Sinon on ne peut avance que de 1*)
-	      else if (b-b') = 1 then (true, Some (Dep((a, b), (a', b'))))
-	      else (false, None)
-		(* Sinon on peut manger une piece sur les cotés *)
-	    else if (b-b' = 1) && (a-a' = 1 || a-a' = -1) then (true, Some (Dep((a, b), (a', b'))))
-	    else (false, None)
 
 	| Piece(p, c) ->
 	    (* Si les blancs roquent à droite *)
@@ -138,13 +139,7 @@ let is_valid_mouvement ch ycolor (a,b) (a', b') =
 	      with _ -> ((0,0), false)
 	    in
 	      (* Vérifie que le chemin est libre, et qu'on ne vole pas au dessus de pieces.*)
-	    let rec is_empty_path ch (a, b) (a', b') (x, y) dist i = 
-	      if i = dist then true
-	      else
-		if ch.(i*x+a).(i*y+b) <> Empty then false
-		else
-		  is_empty_path  ch (a, b) (a', b') (x, y) dist (i+1)
-	    in
+
 	      if survol then 
 		if r then (true, Some (Dep((a, b), (a', b'))))
 		else (false, None)
@@ -195,12 +190,22 @@ let get_all_of_a_piece (a, b) p ycolor =
   let _, (l, (mult, _)) = List.find (fun (x, y) -> x = p) mouvements in
   let l = if ycolor = Black then List.map (fun (x, y) -> (-x, -y)) l else l in
     match l, mult with
-      | l, false ->  let l =  List.map (fun (x, y) -> (a+x, b+y)) l in List.filter (fun (x, y) -> in_board x y) l
+      | l, false ->  
+	  let nl =  List.map (fun (x, y) -> ((a+x, b+y), Queen)) l in
+	    (* On rajoute la promotion du cavalier *)
+	    (* On regarde quelles sont les pieces suceptible d'aller a la promotion, puis on leur assigne le statut de chevalier *)
+	  let nl' = 
+	    List.filter (fun (_, y) -> p = Pawn && 
+	    ((b+y = 7 && ycolor = White) 
+	     || (b+y = 0 && ycolor = Black))) l in
+	    
+	  let nl' = List.map (fun (x, y) -> ((a+x, b+y), Knight)) nl' in 
+	    List.filter (fun ((x, y), _) -> in_board x y) (nl@nl')
       | l, true -> 
 	  let rec list i = 
 	      if i < 8 then 
-		let l = List.map (fun (x, y) -> (x*i+a, y*i+b)) l in
-                let nl = List.filter (fun (x, y) -> in_board x y) l in
+		let l = List.map (fun (x, y) -> ((x*i+a, y*i+b), Queen)) l in
+                let nl = List.filter (fun ((x, y), _) -> in_board x y) l in
 		  nl@(list (i+1))
 	      else []
 	  in
@@ -214,7 +219,7 @@ let rec get_all ch ycolor verif_echec =
 	if (pp <> Empty) && (Aux.color pp = ycolor) then
 	( 
 	  let l = get_all_of_a_piece (i, j) (Aux.piece pp) ycolor in
-	  let nl = List.map (fun x -> (if verif_echec then valid_mouvement else is_valid_mouvement) ch ycolor (i, j) x) l in
+	  let nl = List.map (fun (x, prom) -> (if verif_echec then valid_mouvement else is_valid_mouvement) ch ycolor (i, j) x prom) l in
 	  let nl = List.filter (fun (r, x) -> r) nl in 
 	    list := List.map (fun (_, dep) -> ( Aux.get_option dep)) nl @ !list
 	) done
@@ -226,8 +231,8 @@ and is_in_echec ch ycolor =
   let nl = List.map (fun (bd, mvt) -> 
 		       is_there_a_king (move_piece bd mvt) ycolor) l in
     not (List.fold_left (&&) true nl)
-and valid_mouvement ch ycolor (a, b) (a', b') = 
-  let r, mvt = is_valid_mouvement ch ycolor (a, b) (a', b') in
+and valid_mouvement ch ycolor (a, b) (a', b') p_prom = 
+  let r, mvt = is_valid_mouvement ch ycolor (a, b) (a', b') p_prom in
   if r then
     let m = Aux.copy_matrix ch in 
       if is_in_echec (move_piece m (Aux.get_option mvt)) ycolor then (false, None)
@@ -308,8 +313,19 @@ let play board ycolor prof =
     move_piece board mvt
 ;;
 
+let b = Array.make_matrix 8 8 Empty;;
+(*
+print_board b;;
+b.(1).(0) <- Piece(King, White);;
+let b = play b White 2;;
+let b = play b Black 2;;
+let b = initialise_board();;
+
+let l = get_all b White true;;
+List.length l;;
+*)
 let _ = 
-  let prof = ref 1 in
+  let prof = ref 3 in
   let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
   let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
   let ycolor = Black in
@@ -320,7 +336,7 @@ let _ =
       with _ ->
     (try
 	let a, f = scan_move s in
-	let r, mvt = valid_mouvement board ycolor a f in
+	let r, mvt = valid_mouvement board ycolor a f Queen in
 		   if not r then (print_endline "Invalid mouvement"; loop board)
 		   else
 		       let b = move_piece board (Aux.get_option mvt) in
