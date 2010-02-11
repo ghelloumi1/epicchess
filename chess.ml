@@ -1,12 +1,13 @@
 open Printf
 exception Invalid_deplacement;;
 exception Invalid;;
+exception Invalid_color;;
 type piece_type = King | Queen | Rook | Bishop | Knight | Pawn
 type color = Black | White
 type piece = piece_type * color
 type field = Piece of piece | Empty
 type dep = 
-    Roque of (int * int) * (int * int)
+    Castling of (int * int) * (int * int)
   | Enpassant of (int * int) * (int * int)
   | Prom of (int * int) * (int * int) * piece_type
   | Dep of (int * int) * (int * int)
@@ -16,9 +17,10 @@ type position =
       turn: color;
       board: field array array;
       king_w:(int * int); king_b:(int * int);
-      castling_w:bool; castling_b:bool
+      castling_w:bool; castling_b:bool;
+      moves: dep list
     }
-
+;;
 
 let (|>) f g = fun x -> f (g x);;
 
@@ -26,16 +28,16 @@ module Aux =
 struct
   let color = function
     | Piece (p, c) -> c
-    | Empty -> raise Invalid
+    | Empty -> raise Invalid_color
 
   let piece = function
     | Piece (p, c) -> p
-    | Empty -> raise Invalid
+    | Empty ->( print_string "Aux.piece"; raise Invalid)
 
 
   let get_option = function
     | Some x -> x
-    | None -> raise Invalid 
+    | None -> (print_string "Aux.get_option"; raise Invalid )
 
   let copy_matrix m =
     let r = Array.make_matrix 8 8 Empty in
@@ -70,6 +72,8 @@ struct
     if color = White then p.castling_w else p.castling_b
   let get_king p color = 
     if color = White then p.king_w else p.king_b
+  let add_move p m = 
+    { p with moves = m::p.moves }
 end
 
 let piece_chars = [(King, 'K'); (Queen, 'Q'); (Rook, 'R'); (Bishop, 'B'); (Knight, 'N'); (Pawn, 'P')]
@@ -77,16 +81,16 @@ let piece_chars = [(King, 'K'); (Queen, 'Q'); (Rook, 'R'); (Bishop, 'B'); (Knigh
 let char_of_piece_type pt = List.assoc pt piece_chars;;
 
 let print_board ar = 
-    let separator = "\n   +----+----+----+----+----+----+----+----+\n" in
+  let separator = "\n   +----+----+----+----+----+----+----+----+\n" in
     print_string separator;
     for j = 7 downto 0 do
-        printf " %d |" (j);
-        for i = 0 to 7 do
-            match ar.(i).(j) with
-            | Piece(pt, c) -> printf " %c%c |" (if c = White then ' ' else '*') (char_of_piece_type pt) 
-            | Empty -> print_string "    |"
-        done;
-        print_string separator;
+      printf " %d |" (j);
+      for i = 0 to 7 do
+        match ar.(i).(j) with
+          | Piece(pt, c) -> printf " %c%c |" (if c = White then ' ' else '*') (char_of_piece_type pt) 
+          | Empty -> print_string "    |"
+      done;
+      print_string separator;
     done;
     print_string "\n      0    1    2    3    4    5    6    7\n"
 ;;
@@ -94,10 +98,10 @@ let initialise_board () =
   let ch = Array.make_matrix 8 8 Empty in
     for i = 0 to 7 do ch.(i).(1) <- Piece (Pawn, White) done;
     for i = 0 to 7 do ch.(i).(6) <- Piece (Pawn, Black) done;
-  let inline_piece = [|Rook; Knight; Bishop; Queen; King; Bishop; Knight; Rook|] in
-    for i = 0 to 7 do ch.(i).(0) <- Piece (inline_piece.(i), White) done;
-    for i = 0 to 7 do ch.(i).(7) <- Piece (inline_piece.(i), Black) done;
-    ch;;
+    let inline_piece = [|Rook; Knight; Bishop; Queen; King; Bishop; Knight; Rook|] in
+      for i = 0 to 7 do ch.(i).(0) <- Piece (inline_piece.(i), White) done;
+      for i = 0 to 7 do ch.(i).(7) <- Piece (inline_piece.(i), Black) done;
+      ch;;
 
 
 
@@ -106,7 +110,8 @@ let init () =
     turn = White;
     board = initialise_board();
     king_w = (4,0); king_b = (4,7);
-    castling_w = true; castling_b = true
+    castling_w = true; castling_b = true;
+    moves = []
   }
 ;;
 
@@ -145,20 +150,43 @@ let is_good_path board pred (a, b) (dirx, diry) dist =
 let move_piece pos mvt = 
   let nb = Aux.copy_matrix pos.board in 
   let r = match mvt with 
-      | Dep ((a, b), (a', b')) -> 
-	  nb.(a').(b') <- nb.(a).(b); 
-	  nb.(a).(b) <- Empty; 
-	  let n_pos = Position.edit_board pos nb in
-	    if (Aux.piece nb.(a').(b')) = King then 
-	      Position.edit_castling (Position.edit_king n_pos (a', b') pos.turn) false pos.turn
-	    else n_pos
-      | Prom ((a, b), (a', b'), p) ->
-	  nb.(a').(b') <- Piece(p, pos.turn);
-	  nb.(a).(b) <- Empty;
-	  Position.edit_board pos nb
-      | _ -> raise Invalid
+    | Dep ((a, b), (a', b')) -> 
+	nb.(a').(b') <- nb.(a).(b); 
+	nb.(a).(b) <- Empty; 
+	let n_pos = Position.edit_board pos nb in
+	  if (Aux.piece nb.(a').(b')) = King then 
+	    Position.edit_castling (Position.edit_king n_pos (a', b') pos.turn) false pos.turn
+	  else n_pos
+    | Prom ((a, b), (a', b'), p) ->
+	nb.(a').(b') <- Piece(p, pos.turn);
+	nb.(a).(b) <- Empty;
+	Position.edit_board pos nb
+    | Castling((a, b), (a', b')) ->
+	let ooo = a' < a in
+	  if ooo then 
+	    begin
+	      nb.(3).(b) <-nb.(0).(b);
+	      nb.(0).(b) <- Empty;
+	      nb.(a').(b) <- nb.(a).(b);
+	      nb.(a).(b) <- Empty
+	    end
+	  else 
+	    begin
+	      nb.(5).(b) <- nb.(7).(b);
+	      nb.(7).(b) <- Empty;
+	      nb.(a').(b) <- nb.(a).(b);
+	      nb.(a).(b) <- Empty
+	    end;
+	  let n_pos = Position.edit_castling (Position.edit_king pos (a', b') pos.turn) false pos.turn in
+	    Position.edit_board n_pos nb
+    | Enpassant((a, b), (a', b')) ->
+	nb.(a').(b') <- nb.(a).(b);
+	nb.(a').(b) <- Empty;
+	nb.(a).(b) <- Empty;
+	Position.edit_board pos nb
+	    
   in
-    Position.edit_turn r
+    Position.edit_turn (Position.add_move r mvt)
 ;;
 
 
@@ -167,32 +195,55 @@ let rec make_list e n =
   if n <= 0 then [] else e::(make_list e (n-1));;
 
 
-let get_all_of_a_piece (a, b) p ycolor =
+let get_all_of_a_piece (a, b) p ycolor castling  =
   let _, (l, (mult, _)) = List.find (fun (x, y) -> x = p) mouvements in
   let l = if ycolor = Black then List.map (fun (x, y) -> (-x, -y)) l else l in
     match l, mult with
       | l, false ->  
 	  let nl =  List.map (fun (x, y) -> ((a+x, b+y), Queen)) l in
 	    (* On rajoute la promotion du cavalier *)
-	    (* On regarde quelles sont les pieces suceptible d'aller a la promotion, puis on leur assigne le statut de chevalier *)
 	  let nl' = 
 	    List.filter (fun (_, y) -> p = Pawn && 
-	    ((b+y = 7 && ycolor = White) 
-	     || (b+y = 0 && ycolor = Black))) l in
+		((b+y = 7 && ycolor = White) 
+		 || (b+y = 0 && ycolor = Black))) l in
 	    
 	  let nl' = List.map (fun (x, y) -> ((a+x, b+y), Knight)) nl' in 
-	    List.filter (fun ((x, y), _) -> in_board x y) (nl@nl')
+	    (* On rajoute le roque  *)
+	  let nl'' = 
+	    if castling && (p = King) && ((b = 0 && ycolor = White) || (b = 7 && ycolor = Black)) then 
+	      [((a-2, b), Queen); ((a+2, b), Queen)] 
+	    else  [] in
+	    (* On rajoute la prise en passant *)
+	  let nl''' = 
+	    if p = Pawn && ((a = 4 && ycolor = White) || (a = 3 && ycolor = Black)) then
+	      [((a-1, b+1), Queen); ((a+1, b+1), Queen)]
+	    else [] in
+	    List.filter (fun ((x, y), _) -> in_board x y) (nl'''@nl''@nl'@nl)
       | l, true -> 
 	  let rec list i = 
-	      if i < 8 then 
-		let l = List.map (fun (x, y) -> ((x*i+a, y*i+b), Queen)) l in
-                let nl = List.filter (fun ((x, y), _) -> in_board x y) l in
-		  nl@(list (i+1))
-	      else []
+	    if i < 8 then 
+	      let l = List.map (fun (x, y) -> ((x*i+a, y*i+b), Queen)) l in
+              let nl = List.filter (fun ((x, y), _) -> in_board x y) l in
+		nl@(list (i+1))
+	    else []
 	  in
 	    list 1
 ;;
 
+let is_valid_enpassant game (a,b) (a', b') = 
+  if not ((b = 4 && b' = 5 && game.turn = White) 
+	  || (b = 3 && b' = 2 && game.turn = Black)) then false
+  else 
+    match game.moves with
+      | Dep((x, y), (x', y'))::l -> 
+	  if Aux.piece (game.board.(x').(y')) = Pawn then 
+	    if abs(y'-y) = 2 && abs (a'-a) = 1 then
+	      if a' = x' then true
+	      else false
+	    else false
+	  else false
+      | _ -> false
+;;
 
 let rec is_valid_mouvement game (a,b) (a', b') p_prom = 
   let piece_dep = game.board.(a).(b) in
@@ -201,33 +252,38 @@ let rec is_valid_mouvement game (a,b) (a', b') p_prom =
       (* la piece a bouger existe et est de la couleur du joueur *)
     else if (game.board.(a).(b) = Empty || (Aux.color game.board.(a).(b)) <> game.turn ) then (false, None) 
       (* la destination de la piece est une case vide ou une piece adverse *)
-   else if (try Aux.color game.board.(a').(b') = game.turn with _ -> false) then (false, None)
+    else if (try Aux.color game.board.(a').(b') = game.turn with _ -> false) then (false, None)
     else
       match piece_dep with
 	| Piece(Pawn, col) -> 
-	    (* Si il y a une promotion du pion *)
-	    let prom = b'= (if col = White then 7 else 0) in 
-	      (*Si il n'y a pas de piece adverse *)
-	      if game.board.(a').(b') = Empty then 
-		if a' <> a then (false, None)
-		  (* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
+	    (* Si c'est une prise en passant *)
+	    if is_valid_enpassant game (a, b) (a', b') then (true, Some(Enpassant((a, b), (a', b'))))
+	    else
+	      
+	      (* Si il y a une promotion du pion *)
+	      let prom = b'= (if col = White then 7 else 0) in 
+		(*Si il n'y a pas de piece adverse *)
+		if game.board.(a').(b') = Empty then 
+		  if a' <> a then (false, None)
+		    (* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
+		  else if 
+		    (col = White && b = 1 && b' = 3 && game.board.(a).(b+1) = Empty)
+		    || (col = Black && b = 6 && b' = 4 && game.board.(a).(b-1) = Empty)
+		  then (true, Some (Dep((a, b), (a', b'))))
+		    (* Sinon on ne peut avance que de 1*)
+		  else if (if col = White then b'-b else b-b') = 1 then
+		    if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
+		  else (false, None)
+		    (* Sinon on peut manger une piece sur les cotés *)
 		else if 
-		  (col = White && b = 1 && b' = 3 && game.board.(a).(b+1) = Empty)
-		  || (col = Black && b = 6 && b' = 4 && game.board.(a).(b-1) = Empty)
-		then (true, Some (Dep((a, b), (a', b'))))
-		  (* Sinon on ne peut avance que de 1*)
-		else if (if col = White then b'-b else b-b') = 1 then
+		  if col = White then (b'-b = 1) && (a'-a = 1 || a'-a = -1)
+		  else  (b-b' = 1) && (a-a' = 1 || a-a' = -1)
+		then 
 		  if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
 		else (false, None)
-		  (* Sinon on peut manger une piece sur les cotés *)
-	      else if 
-		if col = White then (b'-b = 1) && (a'-a = 1 || a'-a = -1)
-		else  (b-b' = 1) && (a-a' = 1 || a-a' = -1)
-	      then 
-		if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
-	      else (false, None)
 
 	| Piece(p, c) ->
+
 	    (* Si les blancs roquent à droite *)
 	    (*if (a = 0 && b = 4) && p = King &&  a' = 0 && b' = 7 then
 	      (true, Some[(6,0); *)
@@ -253,43 +309,48 @@ let rec is_valid_mouvement game (a,b) (a', b') p_prom =
 		else (false, None)
 	      else 
 		if is_good_path game.board (fun x -> x = Empty) (a, b) mvt (k-1) then (true, Some (Dep((a, b), (a', b'))))
-		else (false, None)
+		else 
+		  if p = King then 
+		    if is_valid_castling game (a, b) (a', b') then (true, Some (Castling((a, b), (a', b'))))
+		    else (false, None)
+		  else (false, None)
 	| _ -> (false, None)
 
 and is_valid_castling game (a, b) (a', b') = 
   if not (Position.get_castling game (game.turn)) then false
   else if not (b = b') then false
+  else if b = 0 && game.turn = Black then false
+  else if b = 7 && game.turn = White then false
   else
     let k, r = game.board.(a).(b), game.board.(if a' < a then 0 else 7).(b) in
-      if Aux.piece k <> King || Aux.color k <> game.turn then false
-      else if Aux.piece r <> Rook || Aux.color r <> game.turn then false
+      if k = Empty || Aux.piece k <> King || Aux.color k <> game.turn then false
+      else if r = Empty ||  Aux.piece r <> Rook || Aux.color r <> game.turn then false
       else
 	let dist = if a' < a then 3 else 2 in 
 	  if not (is_good_path game.board ((=) Empty) (a, b) ((if a' < a then -1 else 1), 0) dist) then false
 	  else
-	   not (is_check game ||
-	     (if a' < a then 
-	      is_check (Position.edit_king game (a-1, b) game.turn) ||
-              is_check (Position.edit_king game (a-2, b) game.turn) ||
-              is_check (Position.edit_king game (a-3, b) game.turn)
-	    else
-	      is_check (Position.edit_king game (a+1, b) game.turn) ||
-              is_check (Position.edit_king game (a+2, b) game.turn)
-	    ))
-and get_all pos verif_echec = 
+	    not (is_check game ||
+		   (if a' < a then 
+		      is_check (Position.edit_king game (a-1, b) game.turn) ||
+			is_check (Position.edit_king game (a-2, b) game.turn)
+		    else
+		      is_check (Position.edit_king game (a+1, b) game.turn) ||
+			is_check (Position.edit_king game (a+2, b) game.turn)
+		   ))
+and get_all pos verif_echec  = 
   let list = ref [] in
-  for i = 0 to 7 do
-    for j = 0 to 7 do
-      let pp = pos.board.(i).(j) in
-	if (pp <> Empty) && (Aux.color pp = pos.turn) then
-	( 
-	  let l = get_all_of_a_piece (i, j) (Aux.piece pp) pos.turn in
-	  let nl = List.map (fun (x, prom) -> (if verif_echec then valid_mouvement else is_valid_mouvement) 
-				 pos  (i, j) x prom) l in
-	  let nl = List.filter (fun (r, x) -> r) nl in 
-	    list := List.map (fun (_, dep) -> ( Aux.get_option dep)) nl @ !list
-	) done
-  done;
+    for i = 0 to 7 do
+      for j = 0 to 7 do
+	let pp = pos.board.(i).(j) in
+	  if (pp <> Empty) && (Aux.color pp = pos.turn) then
+	    ( 
+	      let l = get_all_of_a_piece (i, j) (Aux.piece pp) pos.turn verif_echec in
+	      let nl = List.map (fun (x, prom) -> (if verif_echec then valid_mouvement else is_valid_mouvement)  
+				   pos  (i, j) x prom) l in 
+	      let nl = List.filter (fun (r, x) -> r = true) nl in  
+		list := List.map (fun (_, dep) -> ( Aux.get_option dep)) nl @ !list
+	    ) done
+    done;
     !list
 and is_check game =
   let pos_king = Position.get_king game (game.turn) in
@@ -297,26 +358,25 @@ and is_check game =
   let f = function 
     | Dep (_, a) | Prom (_, a, _) -> 
 	a = pos_king
-    | _ -> raise Invalid 
+    | _ -> false
   in
   let l = List.map f mvt_adv in 
-      (List.fold_left (||) false l)
+    (List.fold_left (||) false l)
 
 and valid_mouvement game (a, b) (a', b') p_prom = 
   let r, mvt = is_valid_mouvement game (a, b) (a', b') p_prom in
-  if r then
-    if is_check (Position.edit_turn (move_piece game (Aux.get_option mvt))) then  (false, None)
-    else (true, mvt)
-  else (false, None)
+    if r then
+      if is_check (Position.edit_turn (move_piece game (Aux.get_option mvt))) then  (false, None)
+      else (true, mvt)
+    else (false, None)
 ;;
+
 
 (* Regarde si un joueur est en mat *)
 let rec is_check_mat board = 
-  (* Si on ne peut faire aucun coup valide alors il y a checkmat*)
+  (* Si on ne peut faire aucun coup valide alors il y a checkmat *)
    get_all board true = []
 ;;
-  
-
 
 let rec points = [(Pawn, 15); (Knight, 45); (Bishop, 45); (Rook, 150); (Queen, 300); (King, 0)];;
 
@@ -383,7 +443,11 @@ let rec alphabeta game alpha beta prof =
 
 let play game prof = 
   let s, mvt = alphabeta game (-1000000) 1000000 prof in
-   (s,  move_piece game mvt)
+  let sgame = move_piece game mvt in
+    (match sgame.moves with
+      | Enpassant(_, _)::l -> print_string "en passant !";
+      | _ -> ());
+   (s,  sgame)
 ;;
 (*
 let b = init();;
@@ -422,7 +486,7 @@ board.(7).(7) <- Piece(King, Black);;
 board.(3).(3) <- Piece(Pawn, White);;
 let b = { b with board = board; turn = White; king_b = (7,7); king_w = (4,3)};;
 
-*)
+
 let _ = 
   let prof = ref 3 in
   let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
@@ -432,18 +496,21 @@ let _ =
       try
 	let r = scan_prof s in prof := r; loop game
       with _ ->
-    (try
+ (*   (try *)
 	let a, f = scan_move s in
 	let r, mvt = valid_mouvement game a f Queen in
 		   if not r then (print_endline "Invalid mouvement"; loop game)
 		   else
-		       let b = move_piece game (Aux.get_option mvt) in
-		       let s, b' = play b !prof in 
-			 print_board b'.board;
+		    (
+		       let game = move_piece game (Aux.get_option mvt) in  
+			 	 print_board game.board;
+			 	  print_string "ok";
+		       let s, game = play game !prof in 
+			 print_board game.board;
 			 print_int s; print_newline();
-			 loop b'
+			 loop game)
 		    
-    with _ -> print_endline "Invalid command"; loop game)
+ (*   with _ -> print_endline "Invalid command"; loop game) *)
   in
   let game = init() in
      print_board game.board;
@@ -455,10 +522,10 @@ let _ =
 
 
 
-(*
+*)
 let _ = 
-  let prof = ref 7 in
-  let b = ref b in
+  let prof = ref 1 in
+  let b = ref (init()) in
     while true do
       print_endline (if (!b).turn = White then "Blanc" else "Noir");
       let s, r = play !b !prof in
@@ -469,4 +536,3 @@ let _ =
 done
 ;;
       
-*)
