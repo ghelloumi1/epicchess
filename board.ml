@@ -33,11 +33,11 @@ let rec repeat e = function
 let rec repeat_num n = function
   | c when c = n -> []
   | c -> c::(repeat_num n (c+1))
- let int_al = [(0, ('0', fun _ -> ' '));(1, ('1', fun _ -> ' '));
+ let int_al = [(1, ('1', fun _ -> ' '));
 	       (2, ('2', fun _ -> '*'));(3, ('3', fun _ -> ' '));
 	       (4, ('4', fun _ -> '*'));(5, ('5', fun _ -> ' '));
 	       (6, ('6', fun _ -> '*'));(7, ('7', fun _ -> ' '));
-	       (8, ('8', fun _ -> '*'));(9, ('9', fun _ -> ' '))] (*Default representation for ints - adds a start next to pair numbers*)
+	       (8, ('8', fun _ -> '*'));(9, ('9', fun _ -> ' '))] (*Default representation for ints - adds a star next to even numbers*)
 
 
  let test = [| [| 1; 4; 7|];
@@ -79,6 +79,7 @@ let rec repeat_num n = function
       in print_string "\n  "; List.iter2 (fun x y -> print_string x; print_int y) repeat_space repeat_nums; print_string "\n"
 
     method set_point p e = self#raw_set p e
+    method move s e = self#raw_set e (self#raw_get s); self#raw_set s empty
     method get_point p = self#raw_get p
     method get = function 
 	  | Horizontal p -> self#get (Linear (p, (0,1)))
