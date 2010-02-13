@@ -1,6 +1,8 @@
 open Array
 open Printf 
 
+(* http://paste.pocoo.org/show/177553/ *)
+
 exception Fill_InvalidSize;;
 exception OutOfBounds;;
 
@@ -84,6 +86,7 @@ let rec lookup k = function
       in print_string "\n  "; List.iter2 (fun x y -> print_string x; print_int y) repeat_space repeat_nums; print_string "\n"
 
     method set_point p e = self#raw_set p e
+    method delete p = self#raw_set p empty
     method move s e = self#raw_set e (self#raw_get s); self#raw_set s empty
     method get_point p = self#raw_get p
     method get = function 
