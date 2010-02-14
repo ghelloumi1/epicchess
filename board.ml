@@ -3,8 +3,9 @@ open Printf
 
 (* http://paste.pocoo.org/show/177553/ *)
 
-exception Fill_InvalidSize;;
-exception OutOfBounds;;
+exception Fill_InvalidSize
+exception OutOfBounds
+exception InMove_Rollback
 
 type position = int * int
 
@@ -23,6 +24,10 @@ let copy_matrix m (sx,sy) def =
     done;
     r
 
+let cut = function 
+  | [] -> ([],[])
+  | x::xs -> (x, xs)
+
 let rec take n l = match (n,l) with
   | (_, []) -> []
   | (0, _) -> []
@@ -40,79 +45,97 @@ let rec lookup k = function
   | [] -> failwith "Not found"
   | (f, v)::xs -> if (f k) = true then v else lookup k xs
 
- let int_al = [( (=) 1, ('1', fun _ -> ' '));
-	       ( (=) 2, ('2', fun _ -> '*'));( (=) 3, ('3', fun _ -> ' '));
-	       ( (=) 4, ('4', fun _ -> '*'));( (=) 5, ('5', fun _ -> ' '));
-	       ( (=) 6, ('6', fun _ -> '*'));( (=) 7, ('7', fun _ -> ' '));
-	       ( (=) 8, ('8', fun _ -> '*'));( (=) 9, ('9', fun _ -> ' '))] (*Default representation for ints - adds a star next to even numbers*)
+let int_al = [( (=) 1, ('1', fun _ -> ' '));
+	      ( (=) 2, ('2', fun _ -> '*'));( (=) 3, ('3', fun _ -> ' '));
+	      ( (=) 4, ('4', fun _ -> '*'));( (=) 5, ('5', fun _ -> ' '));
+	      ( (=) 6, ('6', fun _ -> '*'));( (=) 7, ('7', fun _ -> ' '));
+	      ( (=) 8, ('8', fun _ -> '*'));( (=) 9, ('9', fun _ -> ' '))] (*Default representation for ints - adds a star next to even numbers*)
 
 
- let test = [| [| 1; 4; 7|];
-	       [| 2; 5; 8|];
-	       [| 3; 6; 9|];
-	       [| 1; 2; 3|] |]
+let test = [| [| 1; 4; 7|];
+	      [| 2; 5; 8|];
+	      [| 3; 6; 9|];
+	      [| 1; 2; 3|] |]
 
- class ['a] board (sx, sy) empty = 
-   object (self)
-     val mutable board = make_matrix sx sy (empty : 'a)
-     method get_board = board 
-     method copy = 
-       let n = new board (sx,sy) empty
-       in n#fill board; n 
+class ['a] board (sx, sy) empty = 
+object (self)
+  val mutable board = make_matrix sx sy (empty : 'a)
+  val mutable in_move = false
+  val mutable move_content = []
+  val mutable history = []
+    
+  initializer in_move <- false; move_content <- []; history <- []
+  
+  method start_move = in_move <- true
+  method end_move = in_move <- false; history <- (move_content::history); move_content <- []
 
-     method fill nb = 
-       let p  = length nb = sx
-       and p' = snd (fold_left (fun (s, valid) e -> if (length e = s && length e = sy) && (valid = true)
-				then (s, true) else (s, false)) 
-		       (length nb.(0),true) nb)
-       in if p && p' then board <- (copy_matrix nb (sx,sy) empty) else (raise Fill_InvalidSize)
+  method rollback = 
+    let rollback' xs = List.map (fun (pos, e) -> self#raw_set pos e) xs
+    and (hd, tl) = cut history
+    in if in_move 
+      then raise InMove_Rollback 
+      else rollback' hd; history <- tl
+    
+  method private log move = if in_move then move_content <- (move::move_content) else ()
 
- (* The association list is of type (key, (char_value, pred)). The predicates return a char added after the char_value (used to differenciate colors, for ex *)
-     method print al = (* Takes an association list to know how to represent various types *)
-       let separator = repeat "-----+" sx in
-       print_string "\n   +"; List.map print_string separator; print_string "\n";
-       for j = sy-1 downto 0 do
-	 printf " %d |" (j);
-	 for i = 0 to sx-1 do
-	   match board.(i).(j) with
-	     | e when e = empty -> print_string "     |"
-	     | e -> let (char_val, pred) = lookup e al
-	       in printf " %c%c  |" (pred e) char_val 
+  method get_board = board 
+  method copy = 
+    let n = new board (sx,sy) empty
+    in n#fill board; n 
+	
+  method fill nb = 
+    let p  = length nb = sx
+    and p' = snd (fold_left (fun (s, valid) e -> if (length e = s && length e = sy) && (valid = true)
+			     then (s, true) else (s, false)) 
+		    (length nb.(0),true) nb)
+    in if p && p' then board <- (copy_matrix nb (sx,sy) empty) else (raise Fill_InvalidSize)
+	
+  (* The association list is of type (key, (char_value, pred)). The predicates return a char added after the char_value (used to differenciate colors, for ex *)
+  method print al = (* Takes an association list to know how to represent various types *)
+    let separator = repeat "-----+" sx in
+      print_string "\n   +"; List.map print_string separator; print_string "\n";
+      for j = sy-1 downto 0 do
+	printf " %d |" (j);
+	for i = 0 to sx-1 do
+	  match board.(i).(j) with
+	    | e when e = empty -> print_string "     |"
+	    | e -> let (char_val, pred) = lookup e al
+	      in printf " %c%c  |" (pred e) char_val 
 	done;
 	print_string "\n   +"; List.map print_string separator; print_string "\n";
       done;
       let repeat_nums = repeat_num sx 0
       and repeat_space = repeat "     " sx
       in print_string "\n  "; List.iter2 (fun x y -> print_string x; print_int y) repeat_space repeat_nums; print_string "\n"
+	  
+  method set_point p e = self#raw_set p e
+  method delete p = self#raw_set p empty
+  method move s e = self#raw_set e (self#raw_get s); self#raw_set s empty
+  method get_point p = self#raw_get p
+  method get = function 
+    | Horizontal p -> self#get (Linear (p, (0,1)))
+    | Vertical p   -> self#get (Linear (p, (1,0)))
+    | Interval (p, s, e, u) -> List.filter p (self#interval s e u)
+    | Linear (p, c) -> self#linear p c
 
-    method set_point p e = self#raw_set p e
-    method delete p = self#raw_set p empty
-    method move s e = self#raw_set e (self#raw_get s); self#raw_set s empty
-    method get_point p = self#raw_get p
-    method get = function 
-	  | Horizontal p -> self#get (Linear (p, (0,1)))
-	  | Vertical p   -> self#get (Linear (p, (1,0)))
-	  | Interval (p, s, e, u) -> List.filter p (self#interval s e u)
-	  | Linear (p, c) -> self#linear p c
-
-(* Private methods *)
-	      
-    method private interval s e u = 
-      let rec interval' = function
-	| c when c <> e && self#in_bounds c -> (self#raw_get c)::(interval' (c++u))
-	| c when self#in_bounds c -> [self#raw_get c]
-	| _ -> raise OutOfBounds
-      in interval' s
-    method private linear (x,y) (a,b) = 
-      let reduced = match (a,b) with
-	| (_, 0) -> (0, y)
-	| (0, _) -> (x, 0)
-	| (_, _) -> let m = min x y in (x-m, y-m)
-      in let rec linear' = function 
-	| (x', y') when self#in_bounds (x',y') -> (self#raw_get (x', y'))::(linear' (x'+a, y'+b))
-	| _ -> []
-      in linear' reduced
-    method private in_bounds (x,y) = (x >= 0) && (x <= sx) && (y >= 0) && (y <= sy)
-    method private raw_get (x,y) = board.(x).(y)
-    method private raw_set (x,y) e = board.(x).(y) <- e
-  end;;
+  (* Private methods *)
+	
+  method private interval s e u = 
+    let rec interval' = function
+      | c when c <> e && self#in_bounds c -> (self#raw_get c)::(interval' (c++u))
+      | c when self#in_bounds c -> [self#raw_get c]
+      | _ -> raise OutOfBounds
+    in interval' s
+  method private linear (x,y) (a,b) = 
+    let reduced = match (a,b) with
+      | (_, 0) -> (0, y)
+      | (0, _) -> (x, 0)
+      | (_, _) -> let m = min x y in (x-m, y-m)
+    in let rec linear' = function 
+      | (x', y') when self#in_bounds (x',y') -> (self#raw_get (x', y'))::(linear' (x'+a, y'+b))
+      | _ -> []
+    in linear' reduced
+  method private in_bounds (x,y) = (x >= 0) && (x <= sx) && (y >= 0) && (y <= sy)
+  method private raw_get (x,y) = board.(x).(y);
+  method private raw_set (x,y) e = self#log ((x,y), self#raw_get (x,y)); board.(x).(y) <- e
+end;;
