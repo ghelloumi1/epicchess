@@ -19,7 +19,7 @@ let get_piece = function
     | Piece(p, c) -> p
     | Empty -> raise Invalid
 
-#use "board.ml";;
+(* #use "board.ml";; *)
 
 
 class chess = 
@@ -28,8 +28,9 @@ object (self)
   val mutable turn = White
   val mutable king_w = (4,0)
   val mutable king_b = (4,6)
-  val mutable castling_w = true
-  val mutable castling_b = true
+  val mutable castling_w = (true, 0)
+  val mutable castling_b = (true, 0)
+
   val mutable moves = []
 
   method init = 
@@ -74,10 +75,15 @@ object (self)
   method king color = if color = White then king_w else king_b
   method edit_king color pos = if color = White then king_w <- pos else king_b <- pos
   
-  method castling color = if color = White then castling_w else castling_w
-  method edit_castling color =
-    if color = White then castling_w <- false
-    else castling_b <- false
+  method castling color = if color = White then castling_w else castling_b
+  method edit_castling color king forward =
+    let f = if forward then (+) else (-) in
+    let r = match self#castling color with 
+	(r, s) -> if king then (r, f s 1) else (not forward, s) in
+
+      if color = White then castling_w <- r 
+      else castling_b <- r
+
     
   method moves = moves
   method add_move m = moves <- m::moves 
@@ -92,19 +98,19 @@ object (self)
 	  if get_piece (board#get_point (a', b')) = King then 
 	    begin
 	      self#edit_king turn (a', b');
-	      self#edit_castling turn 
+	      self#edit_castling turn true true
 	    end
       |  Prom ((a, b), (a', b'), p) ->
 	   board#set_point (a', b') (Piece(p, turn));
 	   board#delete (a, b)
       | Castling ((a, b), (a', b')) ->
 	  let ooo = a' < a in
-	    if ooo then 
+	    (if ooo then 
 		board#move (0,b) (3,b)
 	    else
-		board#move (7,b) (5,b);
+		board#move (7,b) (5,b));
             board#move (a, b) (a', b);
-	    self#edit_castling turn;
+	    self#edit_castling turn false true;
 	    self#edit_king turn (a', b')
       | Enpassant ((a, b), (a', b')) ->
 	  board#move (a, b) (a', b');
@@ -114,7 +120,20 @@ object (self)
     self#edit_turn;
     self#add_move mvt;
     board#end_move
-  method cancel = board#rollback
+
+  method cancel = 
+    board#rollback;
+    self#edit_turn;
+    match List.hd moves with
+      | Castling((a, b), (a', b')) ->
+	  self#edit_castling turn false false;
+	  self#edit_king turn (a, b)
+      | Dep ((a, b), (a', b')) when get_piece (board#get_point (a', b')) = King ->
+	  self#edit_castling turn true false;
+	  self#edit_king turn (a, b)
+      | _ -> ()
+
+
   method copy = 
     let g = new chess in
       g#fill board turn king_w king_b castling_w castling_b moves;
@@ -127,6 +146,10 @@ end
 let game = new chess;;
 game#init;;
 game#print;;
+game#move_piece (Castling((4,0), (6,0)));;
 game#castling Black;;
+game#castling White;;
+game#king White;;
+game#cancel;;
 game#edit_castling White;;
 game#castling Black;;
