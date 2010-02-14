@@ -69,8 +69,8 @@ let rec lookup k = function
 
  (* The association list is of type (key, (char_value, pred)). The predicates return a char added after the char_value (used to differenciate colors, for ex *)
      method print al = (* Takes an association list to know how to represent various types *)
-       let separator = repeat "+----+" sx in
-       print_string "\n   "; List.map print_string separator; print_string "\n";
+       let separator = repeat "-----+" sx in
+       print_string "\n   +"; List.map print_string separator; print_string "\n";
        for j = sy-1 downto 0 do
 	 printf " %d |" (j);
 	 for i = 0 to sx-1 do
@@ -79,7 +79,7 @@ let rec lookup k = function
 	     | e -> let (char_val, pred) = lookup e al
 	       in printf " %c%c  |" (pred e) char_val 
 	done;
-	print_string "\n   "; List.map print_string separator; print_string "\n";
+	print_string "\n   +"; List.map print_string separator; print_string "\n";
       done;
       let repeat_nums = repeat_num sx 0
       and repeat_space = repeat "     " sx
