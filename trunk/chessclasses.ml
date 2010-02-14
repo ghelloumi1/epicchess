@@ -8,7 +8,15 @@ let (!!) = function
   | Black -> White
   | White -> Black
 ;;
+type dep = 
+    Castling of (int * int) * (int * int)
+  | Enpassant of (int * int) * (int * int)
+  | Prom of (int * int) * (int * int) * piece_type
+  | Dep of (int * int) * (int * int)
+;;
+
 #use "board.ml";;
+
 
 class chess = 
 object (self)
@@ -28,7 +36,14 @@ object (self)
 	for i = 0 to 7 do b.(i).(0) <- Piece (inline_piece.(i), White) done;
 	for i = 0 to 7 do b.(i).(7) <- Piece (inline_piece.(i), Black) done;
 	board#fill b
-  method edit_board b = board <- b
+
+  method fill b t kw kb cw cb (m:dep list) =
+    board <- b#copy;
+    turn <- t;
+    king_w <- kw; king_b <- kb;
+    castling_w <- cw; castling_b <- cb;
+    moves <- m
+
   method print = 
     let piece_al = 
       let stared = function 
@@ -46,13 +61,25 @@ object (self)
 	 ]
     in
       board#print piece_al
+
+
+
   method turn = turn
-  method edit_turn t = turn <- t
+  method edit_turn = turn <- !!turn
+
+  method king color = if color = White then king_w else king_b
+  method edit_king color pos = if color = White then king_w <- pos else king_b <- pos
+  
+  method castling color = if color = White then castling_w else castling_w
+  method edit_castling color = if color = White then castling_w <- false else castling_b <- false
+    
+  method moves = moves
+  method add_move m = moves <- m::moves 
+
   method move s e = board#move s e
   method copy = 
     let g = new chess in
-      g#edit_board (board#copy);
-      g#edit_turn (turn);
+      g#fill board turn king_w king_b castling_w castling_b moves;
       g
 
 end
@@ -65,5 +92,9 @@ game#move (4,1) (4,3);;
 
 let e = game#copy;;
 e#move (4,6) (4,4);;
+e#edit_turn;;
 e#print;;
+e#edit_turn
 game#print;;
+e#turn;;
+game#turn;;
