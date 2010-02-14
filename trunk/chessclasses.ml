@@ -75,7 +75,9 @@ object (self)
   method edit_king color pos = if color = White then king_w <- pos else king_b <- pos
   
   method castling color = if color = White then castling_w else castling_w
-  method edit_castling color = if color = White then castling_w <- false else castling_b <- false
+  method edit_castling color =
+    if color = White then castling_w <- false
+    else castling_b <- false
     
   method moves = moves
   method add_move m = moves <- m::moves 
@@ -112,7 +114,7 @@ object (self)
     self#edit_turn;
     self#add_move mvt;
     board#end_move
-  method cancel = b#rollback
+  method cancel = board#rollback
   method copy = 
     let g = new chess in
       g#fill board turn king_w king_b castling_w castling_b moves;
@@ -125,15 +127,6 @@ end
 let game = new chess;;
 game#init;;
 game#print;;
-game#move_piece (Castling ((4,0), (6,0)));;
-
-game#turn;;
-
-let e = game#copy;;
-e#move (4,6) (4,4);;
-e#edit_turn;;
-e#print;;
-e#edit_turn
-game#print;;
-e#turn;;
-game#turn;;
+game#castling Black;;
+game#edit_castling White;;
+game#castling Black;;
