@@ -12,6 +12,7 @@ type dep =
   | Prom of (int * int) * (int * int) * piece_type
   | Dep of (int * int) * (int * int)
 ;;
+
 type position = 
     {
       turn: color;
@@ -46,6 +47,8 @@ struct
       done;
       r
 end
+
+;;
 
 let (!!) = function
   | White -> Black
@@ -416,10 +419,15 @@ struct
   let eval game  = 
     eval_color game.board game.turn - eval_color game.board !!(game.turn);;
 end
+type tree = 
+  | Node of (int * dep * tree * field array array) list
+  | Left of (int * dep)
+;;
+(Chess.init()).board;;
 
 let rec alphabeta game alpha beta prof =
   let rec loop max_s al bt  = function
-    | [] -> Aux.get_option max_s
+    | [] -> Left(Aux.get_option max_s)
     | (b, mvt, eval_c)::tail ->
 	let score = 
 	  if prof = 0 then eval_c
@@ -427,7 +435,7 @@ let rec alphabeta game alpha beta prof =
 	    let s, _ = alphabeta b (-bt) (-al) (prof-1) in -s
         in
 	let nalpha = max score al in
-	  if nalpha > bt then (score, mvt)
+	  if nalpha > bt then Left (score, mvt)
 	  else
 	    loop
 	      (match max_s with
@@ -440,7 +448,7 @@ let rec alphabeta game alpha beta prof =
   let nl = List.map (fun mvt -> let b = Rules.move_piece game mvt in
 		       (b, mvt, Eval.eval (Position.edit_turn b))) l in
   let l' = List.sort (fun (_, _, a) (_, _, b) -> compare b a) nl in
-    loop None alpha beta l'
+    Node (loop None alpha beta l'
 
 ;;
 
