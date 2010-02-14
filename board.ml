@@ -55,7 +55,7 @@ let rec lookup k = function
  class ['a] board (sx, sy) empty = 
    object (self)
      val mutable board = make_matrix sx sy (empty : 'a)
-
+     method get_board = board 
      method copy = 
        let n = new board (sx,sy) empty
        in n#fill board; n 
