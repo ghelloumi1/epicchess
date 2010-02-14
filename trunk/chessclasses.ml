@@ -3,7 +3,7 @@ type piece_type = King | Queen | Rook | Bishop | Knight | Pawn
 type color = Black | White
 type piece = piece_type * color
 type field = Piece of piece | Empty
-
+exception Invalid
 let (!!) = function
   | Black -> White
   | White -> Black
@@ -14,6 +14,10 @@ type dep =
   | Prom of (int * int) * (int * int) * piece_type
   | Dep of (int * int) * (int * int)
 ;;
+
+let get_piece = function
+    | Piece(p, c) -> p
+    | Empty -> raise Invalid
 
 #use "board.ml";;
 
@@ -77,6 +81,38 @@ object (self)
   method add_move m = moves <- m::moves 
 
   method move s e = board#move s e
+
+  method move_piece mvt = 
+    board#start_move;
+    begin match mvt with
+      | Dep ((a, b), (a', b')) -> 
+	  board#move (a, b) (a', b');
+	  if get_piece (board#get_point (a', b')) = King then 
+	    begin
+	      self#edit_king turn (a', b');
+	      self#edit_castling turn 
+	    end
+      |  Prom ((a, b), (a', b'), p) ->
+	   board#set_point (a', b') (Piece(p, turn));
+	   board#delete (a, b)
+      | Castling ((a, b), (a', b')) ->
+	  let ooo = a' < a in
+	    if ooo then 
+		board#move (0,b) (3,b)
+	    else
+		board#move (7,b) (5,b);
+            board#move (a, b) (a', b);
+	    self#edit_castling turn;
+	    self#edit_king turn (a', b')
+      | Enpassant ((a, b), (a', b')) ->
+	  board#move (a, b) (a', b');
+	  board#delete (a', b)
+      | _ -> raise Invalid
+    end;
+    self#edit_turn;
+    self#add_move mvt;
+    board#end_move
+  method cancel = b#rollback
   method copy = 
     let g = new chess in
       g#fill board turn king_w king_b castling_w castling_b moves;
@@ -85,10 +121,13 @@ object (self)
 end
 
 
+
 let game = new chess;;
 game#init;;
+game#print;;
+game#move_piece (Castling ((4,0), (6,0)));;
+
 game#turn;;
-game#move (4,1) (4,3);;
 
 let e = game#copy;;
 e#move (4,6) (4,4);;
