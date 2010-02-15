@@ -122,9 +122,9 @@ object (self)
   method private interval s e u = 
     let rec interval' = function
       | c when c <> e && self#in_bounds c -> (self#raw_get c)::(interval' (c++u))
-      | c when self#in_bounds c -> [self#raw_get c]
+      | c when self#in_bounds c -> []
       | _ -> raise OutOfBounds
-    in interval' s
+    in interval' (s++u)
   method private linear (x,y) (a,b) = 
     let reduced = match (a,b) with
       | (_, 0) -> (0, y)
