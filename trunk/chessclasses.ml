@@ -18,7 +18,10 @@ type dep =
 let get_piece = function
     | Piece(p, c) -> p
     | Empty -> raise Invalid
-
+let get_color = function
+  | Piece(p, c) -> c
+  | Empty -> raise Invalid
+;;
 #use "board.ml";;
 
 
@@ -160,6 +163,86 @@ let get_piece = function
 	      else []
 	    in
 	      list 1
+   method is_valid_enpassant (a,b) (a', b') = 
+    if not ((b = 4 && b' = 5 && turn = White) 
+	    || (b = 3 && b' = 2 && turn = Black)) then false
+    else 
+      match moves with
+	| Dep((x, y), (x', y'))::l -> 
+	    if get_piece (board#get_point (x', y')) = Pawn then 
+	      if abs(y'-y) = 2 && abs (a'-a) = 1 then
+		if a' = x' then true
+		else false
+	      else false
+	    else false
+	| _ -> false
+   method fac n = if n = 0 then 1 else n*self#fac(n-1)
+
+   method is_valid_mouvement (a,b) (a', b') p_prom = 
+     let piece_dep = board#get_point (a, b) in
+     let piece_destination = board#get_point (a', b') in
+       (* la piece a bouger et sa destination sont dans l'echequier *)
+       if not (board#in_bounds (a, b) && board#in_bounds (a', b')) then (false, None)
+	 (* la piece a bouger existe et est de la couleur du joueur *)
+       else if (piece_dep = Empty || (get_color piece_dep) <> turn ) then (false, None) 
+	 (* la destination de la piece est une case vide ou une piece adverse *)
+       else if (try get_color piece_destination = turn with _ -> false) then (false, None)
+       else
+	 match piece_dep with
+	   | Piece(Pawn, col) -> 
+	       (* Si c'est une prise en passant *)
+	       if self#is_valid_enpassant (a, b) (a', b') then (true, Some(Enpassant((a, b), (a', b'))))
+	       else
+		 (* Si il y a une promotion du pion *)
+		 let prom = b'= (if col = White then 7 else 0) in 
+		   (*Si il n'y a pas de piece adverse *)
+		   if piece_destination  = Empty then 
+		     if a' <> a then (false, None)
+		       (* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
+		     else if 
+		       (col = White && b = 1 && b' = 3 && board#get_point (a, b+1) = Empty)
+		       || (col = Black && b = 6 && b' = 4 && board#get_point (a, b-1) = Empty)
+		     then (true, Some (Dep((a, b), (a', b'))))
+		       (* Sinon on ne peut avance que de 1*)
+		     else if (if col = White then b'-b else b-b') = 1 then
+		       if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
+		     else (false, None)
+		       (* Sinon on peut manger une piece sur les cotés *)
+		   else if 
+		     if col = White then (b'-b = 1) && (a'-a = 1 || a'-a = -1)
+		     else  (b-b' = 1) && (a-a' = 1 || a-a' = -1)
+		   then 
+		     if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
+		   else (false, None)
+	   | Piece(p, c) ->
+	       let _, (l, (dep, flyover)) = List.find (fun x -> fst x = p) mouvements in
+		 (* k représente la distance en cases entre la d'arrivée et de départ pour le fou, le roi, la dame et la tour. *)
+
+	       let k =  max(abs(a'-a)) (abs(b'-b)) in
+	       let l_pos = 
+		 if dep then
+		   List.map (fun (x, y) -> ((x, y), (x*k+a, y*k+b))) l
+		 else
+		   List.map (fun (x, y) -> ((x, y), (x+a, y+b))) l
+	       in
+		 (* On vérifie si le déplacement est bien dans ceux autorisés, et on regarde si oui quelle direction il utilise. *)
+	       let mvt, r = 
+		 try let m, a = List.find (fun (a, (x, y)) ->  a' = x && b' = y) l_pos in (m, true)
+		 with _ -> ((0,0), false)
+	       in
+		 (* Vérifie que le chemin est libre, et qu'on ne vole pas au dessus de pieces.*)
+		 if flyover then 
+		   if r then (true, Some (Dep((a, b), (a', b'))))
+		   else (false, None)
+		 else 
+		   if board#get_interval ((=) Empty) (a, b) (a', b') mvt then (true, Some (Dep((a, b), (a', b'))))
+		   else 
+		    (* if p = King then 
+		       if is_valid_castling game (a, b) (a', b') then (true, Some (Castling((a, b), (a', b'))))
+		       else  (false, None)
+		     else *)(false, None) 
+	   | _ -> (false, None)
+
 
    (* Private methods *)
    method private edit_king color pos = if color = White then king_w <- pos else king_b <- pos
@@ -178,9 +261,11 @@ let get_piece = function
 
 
 let game = new chess;;
+game#fac 5;;
 game#mouvements_p (4, 1) Pawn true ;;
 game#init;;
 game#print;;
+game#is_valid_mouvement (4,1) (4,3) Queen;;
 game#move_piece (Castling((4,0), (6,0)));;
 game#castling Black;;
 game#castling White;;
