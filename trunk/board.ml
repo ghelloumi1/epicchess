@@ -9,9 +9,8 @@ exception InMove_Rollback
 
 type position = int * int
 
-type 'a accessor = 
+type accessor = 
     Linear of position * (int * int) (* Linear line, with the last tuple being the direction vector *)
-  | Interval of ('a -> bool) *  position * position * (int * int)
   | Horizontal of position
   | Vertical of position
 
@@ -97,7 +96,7 @@ object (self)
       for j = sy-1 downto 0 do
 	printf " %d |" (j);
 	for i = 0 to sx-1 do
-	  match board.(i).(j) with
+	  match self#raw_get (i,j) with
 	    | e when e = empty -> print_string "     |"
 	    | e -> let (char_val, pred) = lookup e al
 	      in printf " %c%c  |" (pred e) char_val 
@@ -112,10 +111,10 @@ object (self)
   method delete p = self#raw_set p empty
   method move s e = self#raw_set e (self#raw_get s); self#raw_set s empty
   method get_point p = self#raw_get p
+  method get_interval p s e u = List.fold_left (fun acc e -> if (acc && e) then true else false) true (List.map p (self#interval s e u))
   method get = function 
-    | Horizontal p -> self#get (Linear (p, (0,1)))
+      Horizontal p -> self#get (Linear (p, (0,1)))
     | Vertical p   -> self#get (Linear (p, (1,0)))
-    | Interval (p, s, e, u) -> List.filter p (self#interval s e u)
     | Linear (p, c) -> self#linear p c
 
   (* Private methods *)
