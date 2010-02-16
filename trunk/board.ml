@@ -134,7 +134,7 @@ object (self)
       | (x', y') when self#in_bounds (x',y') -> (self#raw_get (x', y'))::(linear' (x'+a, y'+b))
       | _ -> []
     in linear' reduced
-  method in_bounds (x,y) = (x >= 0) && (x <= sx) && (y >= 0) && (y <= sy)
+  method in_bounds (x,y) = (x >= 0) && (x < sx) && (y >= 0) && (y < sy)
   method private raw_get (x,y) = board.(x).(y);
   method private raw_set (x,y) e = self#log ((x,y), self#raw_get (x,y)); board.(x).(y) <- e
 end;;
