@@ -22,6 +22,10 @@ let get_color = function
   | Piece(p, c) -> c
   | Empty -> raise Invalid
 ;;
+let get_option = function
+  | Some e -> e
+  | None -> raise Invalid
+;;
 #use "board.ml";;
 
 
@@ -75,17 +79,28 @@ let get_color = function
 	   (f Pawn,   ('P', stared));
 	  ]
      in
+       print_endline (if turn = White then "White's turn" else "Black's turn");
        board#print piece_al
 
 
 
    method turn = turn
-   method edit_turn = turn <- !!turn
+   method private edit_turn = turn <- !!turn
 
    method  king color = if color = White then king_w else king_b
    method castling color = if color = White then castling_w else castling_b
      
    method moves = moves
+
+   method private edit_king color pos = if color = White then king_w <- pos else king_b <- pos
+   method private add_move m = moves <- m::moves 
+   method private edit_castling color king forward =
+     let f = if forward then (+) else (-) in
+     let r = match self#castling color with 
+	 (r, s) -> if king then (r, f s 1) else (not forward, s) in
+
+       if color = White then castling_w <- r 
+       else castling_b <- r
 
    method move_piece mvt = 
      board#start_move;
@@ -120,16 +135,21 @@ let get_color = function
    method cancel = 
      board#rollback;
      self#edit_turn;
-     match List.hd moves with
-       | Castling((a, b), (a', b')) ->
-	   self#edit_castling turn false false;
-	   self#edit_king turn (a, b)
-       | Dep ((a, b), (a', b')) when get_piece (board#get_point (a', b')) = King ->
-	   self#edit_castling turn true false;
-	   self#edit_king turn (a, b)
-       | _ -> ()
+     try
+       match List.hd moves with
+	 | Castling((a, b), (a', b')) ->
+	     self#edit_castling turn false false;
+	     self#edit_king turn (a, b)
+	 | Dep ((a, b), (a', b')) when get_piece (board#get_point (a', b')) = King ->
+	     self#edit_castling turn true false;
+	     self#edit_king turn (a, b)
+	 | _ -> () 
+     with _ -> ();
+       try
+	 moves <- List.tl moves
+       with _ -> ()
 
-   method mouvements_p (a, b) p castling  =
+   method private mouvements_p (a, b) p castling  =
      (* On récupère les mouvements de la piece *)
     let _, (l, (mult, _)) = List.find (fun (x, y) -> x = p) mouvements in
       (* Si c'est une piece noire, les mouvements sont inversés *)
@@ -163,7 +183,7 @@ let get_color = function
 	      else []
 	    in
 	      list 1
-   method is_valid_enpassant (a,b) (a', b') = 
+   method private check_enpassant (a,b) (a', b') = 
     if not ((b = 4 && b' = 5 && turn = White) 
 	    || (b = 3 && b' = 2 && turn = Black)) then false
     else 
@@ -176,22 +196,68 @@ let get_color = function
 	      else false
 	    else false
 	| _ -> false
-   method fac n = if n = 0 then 1 else n*self#fac(n-1)
+   method private check_castling (a, b) (a', b') = 
+     let s, n = self#castling turn in
+       if n > 0 || (not s) then false
+       else if not (b = b') then false
+       else if b = 0 && turn = Black then false
+       else if b = 7 && turn = White then false
+       else 
+	  let k, r = board#get_point(a, b), board#get_point ((if a' < a then 0 else 7), b) in
+	    if k = Empty || get_piece k <> King || get_color k <> turn then false
+	    else if r = Empty ||  get_piece r <> Rook || get_color r <> turn then false
+	    else  
+		if not (board#get_interval ((=) Empty) (a, b) ((if a' < a then 0 else 7), b)  ((if a' < a then -1 else 1), 0)) then false
+		else 
+		  not (self#is_check (a, b) || (if a' < a then 
+					     self#is_check (a-1, b) ||
+					     self#is_check (a-2, b)
+					   else
+					     self#is_check (a+1, b) ||
+					     self#is_check (a+2, b)
+					  )
+		      )
+   method check_move (a, b) (a', b') p_prom = 
+    let r, mvt = self#is_check_move(a, b) (a', b') p_prom in
+    let pos_king = self#king turn in
+      if r then begin
+	self#move_piece (get_option mvt);
+	self#edit_turn;
+	 let r' = self#is_check pos_king in
+	self#edit_turn;
+	self#cancel;
+	  if r' then (false, None) else (true, mvt)
+      end
+      else (false, None)
+		  
+   method private is_check pos_king =
+     self#edit_turn;
+    let mvt_adv = self#get_all false false in
+     self#edit_turn;
+    let f = function 
+      | Dep (_, a) | Prom (_, a, _) -> 
+	  a = pos_king
+      | _ -> false
+    in
+    let l = List.map f mvt_adv in 
+      (List.fold_left (||) false l) 
 
-   method is_valid_mouvement (a,b) (a', b') p_prom = 
-     let piece_dep = board#get_point (a, b) in
-     let piece_destination = board#get_point (a', b') in
-       (* la piece a bouger et sa destination sont dans l'echequier *)
+
+   method private is_check_move (a,b) (a', b') p_prom = 
+     (* la piece a bouger et sa destination sont dans l'echequier *)
        if not (board#in_bounds (a, b) && board#in_bounds (a', b')) then (false, None)
-	 (* la piece a bouger existe et est de la couleur du joueur *)
-       else if (piece_dep = Empty || (get_color piece_dep) <> turn ) then (false, None) 
-	 (* la destination de la piece est une case vide ou une piece adverse *)
-       else if (try get_color piece_destination = turn with _ -> false) then (false, None)
        else
+	 let piece_dep = board#get_point (a, b) in
+	 let piece_destination = board#get_point (a', b') in
+	 (* la piece a bouger existe et est de la couleur du joueur *)
+	   if (piece_dep = Empty || (get_color piece_dep) <> turn ) then (false, None) 
+	 (* la destination de la piece est une case vide ou une piece adverse *)
+	   else if (try get_color piece_destination = turn with _ -> false) then (false, None)
+	   else
 	 match piece_dep with
 	   | Piece(Pawn, col) -> 
 	       (* Si c'est une prise en passant *)
-	       if self#is_valid_enpassant (a, b) (a', b') then (true, Some(Enpassant((a, b), (a', b'))))
+	       if self#check_enpassant (a, b) (a', b') then (true, Some(Enpassant((a, b), (a', b'))))
 	       else
 		 (* Si il y a une promotion du pion *)
 		 let prom = b'= (if col = White then 7 else 0) in 
@@ -237,23 +303,29 @@ let get_color = function
 		 else 
 		   if board#get_interval ((=) Empty) (a, b) (a', b') mvt then (true, Some (Dep((a, b), (a', b'))))
 		   else 
-		    (* if p = King then 
-		       if is_valid_castling game (a, b) (a', b') then (true, Some (Castling((a, b), (a', b'))))
+		    if p = King then 
+		       if self#check_castling (a, b) (a', b') then (true, Some (Castling((a, b), (a', b'))))
 		       else  (false, None)
-		     else *)(false, None) 
+		     else (false, None) 
 	   | _ -> (false, None)
 
 
-   (* Private methods *)
-   method private edit_king color pos = if color = White then king_w <- pos else king_b <- pos
-   method private add_move m = moves <- m::moves 
-   method private edit_castling color king forward =
-     let f = if forward then (+) else (-) in
-     let r = match self#castling color with 
-	 (r, s) -> if king then (r, f s 1) else (not forward, s) in
-
-       if color = White then castling_w <- r 
-       else castling_b <- r
+   method private get_all check_king castling  = 
+     let list = ref [] in
+       for i = 0 to 7 do
+	 for j = 0 to 7 do
+	   let pp = board#get_point(i, j) in
+	     if (pp <> Empty) && (get_color pp = turn) then
+	       ( 
+		 let l = self#mouvements_p (i, j) (get_piece pp) castling in
+		   let nl = List.map (fun (c, prom) -> (if check_king then self#check_move else self#is_check_move) (i, j) c prom) l in 
+		 let nl = List.filter (fun (r, x) -> r = true) nl in  
+		   list := List.map (fun (_, dep) -> (get_option dep)) nl @ !list
+	       ) done
+       done;
+       !list
+   method get_moves check_king = 
+     self#get_all check_king true
 
  end
 
@@ -264,9 +336,13 @@ let game = new chess;;
 game#fac 5;;
 game#mouvements_p (4, 1) Pawn true ;;
 game#init;;
+let l = game#get_moves true;;
+game#moves;;
+List.length l;;
 game#print;;
-game#is_valid_mouvement (4,1) (4,3) Queen;;
-game#move_piece (Castling((4,0), (6,0)));;
+game#edit_turn;;
+game#is_valid_mouvement (3,0) (4,1) Queen;;
+game#move_piece (Dep((5,1), (5,2)));;
 game#castling Black;;
 game#castling White;;
 game#king White;;
