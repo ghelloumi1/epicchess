@@ -43,13 +43,13 @@ let rec repeat_num n = function
 let rec lookup k = function
   | [] -> failwith "Not found"
   | (f, v)::xs -> if (f k) = true then v else lookup k xs
-
+;;
 let int_al = [( (=) 1, ('1', fun _ -> ' '));
 	      ( (=) 2, ('2', fun _ -> '*'));( (=) 3, ('3', fun _ -> ' '));
 	      ( (=) 4, ('4', fun _ -> '*'));( (=) 5, ('5', fun _ -> ' '));
 	      ( (=) 6, ('6', fun _ -> '*'));( (=) 7, ('7', fun _ -> ' '));
 	      ( (=) 8, ('8', fun _ -> '*'));( (=) 9, ('9', fun _ -> ' '))] (*Default representation for ints - adds a star next to even numbers*)
-
+;;
 
 let test = [| [| 1; 4; 7|];
 	      [| 2; 5; 8|];
