@@ -33,7 +33,7 @@ type dep =
 
 let get_piece = function
     | Piece(p, c) -> p
-    | Empty -> raise Invalid
+    | Empty -> print_string "get_piece"; raise Invalid
 let get_color = function
   | Piece(p, c) -> c
   | Empty -> raise Invalid
@@ -161,7 +161,7 @@ let get_option = function
 	 | Castling((a, b), (a', b')) ->
 	     self#edit_castling turn false false;
 	     self#edit_king turn (a, b)
-	 | Dep ((a, b), (a', b')) when get_piece (board#get_point (a', b')) = King ->
+	 | Dep ((a, b), (a', b')) when get_piece (board#get_point (a', b')) = King  ->
 	     self#edit_castling turn true false;
 	     self#edit_king turn (a, b)
 	 | _ -> () 
@@ -235,8 +235,8 @@ let get_option = function
 					     self#is_check (a+2, b)
 					  )
 		      )
-   method check_move (a, b) (a', b') p_prom = 
-    let r, mvt = self#is_check_move(a, b) (a', b') p_prom in
+   method check_move (a, b) (a', b') p_prom castling = 
+    let r, mvt = self#is_check_move(a, b) (a', b') p_prom castling in
       if r then begin
 	(* blanc *)
 	self#move_piece (get_option mvt);
@@ -262,88 +262,89 @@ let get_option = function
       (List.fold_left (||) false l) 
 
 
-   method private is_check_move (a,b) (a', b') p_prom = 
+   method  is_check_move (a,b) (a', b') p_prom castling = 
      (* la piece a bouger et sa destination sont dans l'echequier *)
-       if not (board#in_bounds (a, b) && board#in_bounds (a', b')) then (false, None)
-       else
-	 let piece_dep = board#get_point (a, b) in
-	 let piece_destination = board#get_point (a', b') in
+     if not (board#in_bounds (a, b) && board#in_bounds (a', b')) then (false, None)
+     else
+       let piece_dep = board#get_point (a, b) in
+       let piece_destination = board#get_point (a', b') in
 	 (* la piece a bouger existe et est de la couleur du joueur *)
-	   if (piece_dep = Empty || (get_color piece_dep) <> turn ) then (false, None) 
-	 (* la destination de la piece est une case vide ou une piece adverse *)
-	   else if (try get_color piece_destination = turn with _ -> false) then (false, None)
-	   else
-	 match piece_dep with
-	   | Piece(Pawn, col) -> 
-	       (* Si c'est une prise en passant *)
-	       if self#check_enpassant (a, b) (a', b') then (true, Some(Enpassant((a, b), (a', b'))))
-	       else
-		 (* Si il y a une promotion du pion *)
-		 let prom = b'= (if col = White then 7 else 0) in 
-		   (*Si il n'y a pas de piece adverse *)
-		   if piece_destination  = Empty then 
-		     if a' <> a then (false, None)
-		       (* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
+	 if (piece_dep = Empty || (get_color piece_dep) <> turn ) then (false, None) 
+	   (* la destination de la piece est une case vide ou une piece adverse *)
+	 else if (try get_color piece_destination = turn with _ -> false) then (false, None)
+	 else
+	   match piece_dep with
+	     | Piece(Pawn, col) -> 
+		 (* Si c'est une prise en passant *)
+		 if self#check_enpassant (a, b) (a', b') then (true, Some(Enpassant((a, b), (a', b'))))
+		 else
+		   (* Si il y a une promotion du pion *)
+		   let prom = b'= (if col = White then 7 else 0) in 
+		     (*Si il n'y a pas de piece adverse *)
+		     if piece_destination  = Empty then 
+		       if a' <> a then (false, None)
+			 (* Si on est sur la ligne 1 on peut aller soit a la ligne  2 soit à la ligne 3 *)
+		       else if 
+			 (col = White && b = 1 && b' = 3 && board#get_point (a, b+1) = Empty)
+			 || (col = Black && b = 6 && b' = 4 && board#get_point (a, b-1) = Empty)
+		       then (true, Some (Dep((a, b), (a', b'))))
+			 (* Sinon on ne peut avance que de 1*)
+		       else if (if col = White then b'-b else b-b') = 1 then
+			 if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
+		       else (false, None)
+			 (* Sinon on peut manger une piece sur les cotés *)
 		     else if 
-		       (col = White && b = 1 && b' = 3 && board#get_point (a, b+1) = Empty)
-		       || (col = Black && b = 6 && b' = 4 && board#get_point (a, b-1) = Empty)
-		     then (true, Some (Dep((a, b), (a', b'))))
-		       (* Sinon on ne peut avance que de 1*)
-		     else if (if col = White then b'-b else b-b') = 1 then
+		       if col = White then (b'-b = 1) && (a'-a = 1 || a'-a = -1)
+		       else  (b-b' = 1) && (a-a' = 1 || a-a' = -1)
+		     then 
 		       if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
 		     else (false, None)
-		       (* Sinon on peut manger une piece sur les cotés *)
-		   else if 
-		     if col = White then (b'-b = 1) && (a'-a = 1 || a'-a = -1)
-		     else  (b-b' = 1) && (a-a' = 1 || a-a' = -1)
-		   then 
-		     if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
+	     | Piece(p, c) ->
+		 (* Si c'est un roque *)
+		  if p = King && castling then 
+		    if self#check_castling (a, b) (a', b') then 
+		       (true, Some (Castling((a, b), (a', b'))))
+		     else  (false, None)
+		  else
+		 let _, (l, (dep, flyover)) = List.find (fun x -> fst x = p) mouvements in
+		   (* k représente la distance en cases entre la d'arrivée et de départ pour le fou, le roi, la dame et la tour. *)
+
+		 let k =  max(abs(a'-a)) (abs(b'-b)) in
+		 let l_pos = 
+		   if dep then
+		     List.map (fun (x, y) -> ((x, y), (x*k+a, y*k+b))) l
+		   else
+		     List.map (fun (x, y) -> ((x, y), (x+a, y+b))) l
+		 in
+		   (* On vérifie si le déplacement est bien dans ceux autorisés, et on regarde si oui quelle direction il utilise. *)
+		 let mvt, r = 
+		   try let m, a = List.find (fun (a, (x, y)) ->  a' = x && b' = y) l_pos in (m, true)
+		   with _ -> ((0,0), false)
+		 in
+		   (* Vérifie que le chemin est libre, et qu'on ne vole pas au dessus de pieces.*)
+		   if flyover then
+		     if r then (true, Some (Dep((a, b), (a', b'))))
+		     else (false, None)
+		   else if board#get_interval ((=) Empty) (a, b) (a', b') mvt then (true, Some (Dep((a, b), (a', b'))))
 		   else (false, None)
-	   | Piece(p, c) ->
-	       let _, (l, (dep, flyover)) = List.find (fun x -> fst x = p) mouvements in
-		 (* k représente la distance en cases entre la d'arrivée et de départ pour le fou, le roi, la dame et la tour. *)
+		      
+	     | _ -> (false, None)
 
-	       let k =  max(abs(a'-a)) (abs(b'-b)) in
-	       let l_pos = 
-		 if dep then
-		   List.map (fun (x, y) -> ((x, y), (x*k+a, y*k+b))) l
-		 else
-		   List.map (fun (x, y) -> ((x, y), (x+a, y+b))) l
-	       in
-		 (* On vérifie si le déplacement est bien dans ceux autorisés, et on regarde si oui quelle direction il utilise. *)
-	       let mvt, r = 
-		 try let m, a = List.find (fun (a, (x, y)) ->  a' = x && b' = y) l_pos in (m, true)
-		 with _ -> ((0,0), false)
-	       in
-		 (* Vérifie que le chemin est libre, et qu'on ne vole pas au dessus de pieces.*)
-		 if flyover then 
-		   if r then (true, Some (Dep((a, b), (a', b'))))
-		   else (false, None)
-		 else 
-		   if board#get_interval ((=) Empty) (a, b) (a', b') mvt then (true, Some (Dep((a, b), (a', b'))))
-		   else 
-		    if p = King then 
-		      if self#check_castling (a, b) (a', b') then 
-			(true, Some (Castling((a, b), (a', b'))))
-		       else  (false, None)
-		     else (false, None) 
-	   | _ -> (false, None)
-
-
+   method private printc (a, b) = 
+     print_int a; print_string " : "; print_int b; print_newline()
    method private get_all check_king castling  = 
      let list = ref [] in
-       for i = 0 to 7 do
+      for i = 0 to 7 do
 	 for j = 0 to 7 do
 	   let pp = board#get_point(i, j) in
 	     if (pp <> Empty) && (get_color pp = turn) then
 	       ( 
 		 let l = self#mouvements_p (i, j) (get_piece pp) castling in
-		   	 print_int i; print_string " "; print_int j; print_newline();
-		   let nl = List.map (fun (c, prom) -> (if check_king then self#check_move else self#is_check_move) (i, j) c prom) l in 
+		   let nl = List.map (fun (c, prom) -> (if check_king then self#check_move else self#is_check_move) (i, j) c prom castling) l in 
 		 let nl = List.filter (fun (r, x) -> r = true) nl in  
-		   list := List.map (fun (_, dep) -> (get_option dep)) nl @ !list
+		   list := List.map (fun (_, dep) -> (get_option dep)) nl @ !list;
 	       ) done
-       done;
+       done; 
        !list
    method get_moves check_king = 
      self#get_all check_king true
@@ -357,24 +358,37 @@ let get_option = function
    let c = List.nth l (Random.int (List.length l)) in
 
      game#move_piece c;
-   game#print 
 ;;
-let game = new chess;;
-game#init;;
-game#king Black;;
-game#move_piece (Dep((4,0), (4,5)));;
-game#edit_king;;
+
+Random.self_init();;
+ let game = new chess;;
+ let debug () = 
+ let moves = List.rev [Dep ((6, 0), (7, 2)); Dep ((5, 7), (4, 6)); Dep ((5, 0), (6, 1));
+ Dep ((2, 4), (2, 3)); Dep ((3, 3), (4, 4)); Dep ((3, 5), (2, 4));
+ Dep ((5, 1), (5, 2)); Dep ((5, 6), (5, 4)); Dep ((2, 0), (3, 1));
+ Dep ((4, 6), (3, 5)); Dep ((4, 3), (3, 5)); Dep ((6, 7), (7, 5));
+ Dep ((3, 1), (3, 3)); Dep ((3, 7), (4, 6)); Dep ((6, 1), (6, 2));
+ Dep ((4, 6), (4, 4)); Dep ((2, 2), (4, 3)); Dep ((3, 6), (3, 4));
+ Dep ((1, 0), (2, 2))] in
+   game#init;
+   List.iter game#move_piece moves;
+   game#print;
+   ignore (game#get_moves true)
+;;
+
+game#mouvements_p (2,3) Queen true;;
+debug();;
+game#print;;
 game#edit_turn;;
-let l = game#get_moves true;;
-game#moves;;
-game#print;;
-play game;;
-game#print;;
-game#turn;;
-game#get_moves false;;
-let l = game#moves;;
-let l = [Dep ((5, 7), (2, 4)); Dep ((6, 0), (7, 2)); Dep ((0, 6), (0, 5));
- Dep ((2, 1), (2, 3)); Dep ((4, 6), (4, 4)); Dep ((1, 1), (1, 3))];;
-List.iter game#move_piece l;;
-game#print;;
-game#mouvements_p (4,0) King false;;
+ let l = game#get_moves true;;
+List.length l;;
+
+
+ let g = new chess;;
+ g#init;;
+ for i = 0 to 100 do play g done;;
+g#print;;
+g#get_moves false;;
+g#edit_turn;;
+g#get_moves false;;
+g#print;;
