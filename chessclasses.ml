@@ -69,7 +69,8 @@ let get_option = function
    val mutable castling_b = (true, 0)
 
    val mutable moves = []
-
+   
+   method apply b = board#fill b
    method init = 
      let b = Array.make_matrix 8 8 Empty in
        for i = 0 to 7 do b.(i).(1) <- Piece (Pawn, White) done;
@@ -109,7 +110,7 @@ let get_option = function
      
    method moves = moves
 
-   method private edit_king color pos = if color = White then king_w <- pos else king_b <- pos
+   method edit_king color pos = if color = White then king_w <- pos else king_b <- pos
    method private add_move m = moves <- m::moves 
    method private edit_castling color king forward =
      let f = if forward then (+) else (-) in
@@ -301,11 +302,9 @@ let get_option = function
 		     else (false, None)
 	     | Piece(p, c) ->
 		 (* Si c'est un roque *)
-		  if p = King && castling then 
-		    if self#check_castling (a, b) (a', b') then 
+		  if p = King && castling && self#check_castling (a, b) (a', b') then 
 		       (true, Some (Castling((a, b), (a', b'))))
-		     else  (false, None)
-		  else
+		  else 
 		 let _, (l, (dep, flyover)) = List.find (fun x -> fst x = p) mouvements in
 		   (* k représente la distance en cases entre la d'arrivée et de départ pour le fou, le roi, la dame et la tour. *)
 
@@ -338,12 +337,15 @@ let get_option = function
 	 for j = 0 to 7 do
 	   let pp = board#get_point(i, j) in
 	     if (pp <> Empty) && (get_color pp = turn) then
-	       ( 
+	       (
+		 self#printc (i, j);
 		 let l = self#mouvements_p (i, j) (get_piece pp) castling in
+		   print_string "ok";
 		   let nl = List.map (fun (c, prom) -> (if check_king then self#check_move else self#is_check_move) (i, j) c prom castling) l in 
 		 let nl = List.filter (fun (r, x) -> r = true) nl in  
 		   list := List.map (fun (_, dep) -> (get_option dep)) nl @ !list;
-	       ) done
+	       )
+	     done
        done; 
        !list
    method get_moves check_king = 
@@ -353,42 +355,31 @@ let get_option = function
 
 
 
- let play game = 
+ let b = Array.create_matrix 8 8 Empty;;
+ b.(2).(2) <- Piece(King, White);;
+ b.(4).(6) <- Piece(King, Black);;
+ let g = new chess;;
+ g#apply b;;
+ g#edit_king White (2,2);;
+ g#edit_king Black (4,6);;
+ g#print;;
+ g#get_moves false;;
+ let l = g#moves;;
+ List.iter g#move_piece l;;
+let play game = 
    let l =  (game#get_moves true) in
    let c = List.nth l (Random.int (List.length l)) in
 
      game#move_piece c;
+     game#print
 ;;
-
+play g;;
 Random.self_init();;
- let game = new chess;;
- let debug () = 
- let moves = List.rev [Dep ((6, 0), (7, 2)); Dep ((5, 7), (4, 6)); Dep ((5, 0), (6, 1));
- Dep ((2, 4), (2, 3)); Dep ((3, 3), (4, 4)); Dep ((3, 5), (2, 4));
- Dep ((5, 1), (5, 2)); Dep ((5, 6), (5, 4)); Dep ((2, 0), (3, 1));
- Dep ((4, 6), (3, 5)); Dep ((4, 3), (3, 5)); Dep ((6, 7), (7, 5));
- Dep ((3, 1), (3, 3)); Dep ((3, 7), (4, 6)); Dep ((6, 1), (6, 2));
- Dep ((4, 6), (4, 4)); Dep ((2, 2), (4, 3)); Dep ((3, 6), (3, 4));
- Dep ((1, 0), (2, 2))] in
-   game#init;
-   List.iter game#move_piece moves;
-   game#print;
-   ignore (game#get_moves true)
-;;
-
-game#mouvements_p (2,3) Queen true;;
-debug();;
-game#print;;
-game#edit_turn;;
- let l = game#get_moves true;;
-List.length l;;
-
-
- let g = new chess;;
- g#init;;
- for i = 0 to 100 do play g done;;
+let g = new chess;;
+g#init;;
 g#print;;
-g#get_moves false;;
-g#edit_turn;;
-g#get_moves false;;
-g#print;;
+let l = g#moves;;
+List.iter g#move_piece l;;
+g#mouvements_p (4,7) Queen false;;
+play g;;
+g#turn;;
