@@ -43,12 +43,15 @@ let rec repeat_num n = function
 let rec lookup k = function
   | [] -> failwith "Not found"
   | (f, v)::xs -> if (f k) = true then v else lookup k xs
-;;
-let int_al = [( (=) 1, ('1', fun _ -> ' '));
-	      ( (=) 2, ('2', fun _ -> '*'));( (=) 3, ('3', fun _ -> ' '));
-	      ( (=) 4, ('4', fun _ -> '*'));( (=) 5, ('5', fun _ -> ' '));
-	      ( (=) 6, ('6', fun _ -> '*'));( (=) 7, ('7', fun _ -> ' '));
-	      ( (=) 8, ('8', fun _ -> '*'));( (=) 9, ('9', fun _ -> ' '))] (*Default representation for ints - adds a star next to even numbers*)
+
+let const a (_:'a) = a
+
+let int_al () = [( (=) 1, ('1', const ' '));
+		 ( (=) 2, ('2', const '*'));( (=) 3, ('3', const ' '));
+		 ( (=) 4, ('4', const '*'));( (=) 5, ('5', const ' '));
+		 ( (=) 6, ('6', const '*'));( (=) 7, ('7', const ' '));
+		 ( (=) 8, ('8', const '*'));( (=) 9, ('9', const ' '))] (*Default representation for ints - adds a star next to even numbers*)
+
 ;;
 
 let test = [| [| 1; 4; 7|];
@@ -98,7 +101,7 @@ object (self)
 	for i = 0 to sx-1 do
 	  match self#raw_get (i,j) with
 	    | e when e = empty -> print_string "     |"
-	    | e -> let (char_val, pred) = lookup e al
+	    | e -> let (char_val, pred) = lookup e (al ())
 	      in printf " %c%c  |" (pred e) char_val 
 	done;
 	print_string "\n   +"; List.map print_string separator; print_string "\n";
