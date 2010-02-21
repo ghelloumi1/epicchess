@@ -11,11 +11,7 @@ let (!!) = function
   | White -> Black
 ;;
 type score = PInf | N of int | MInf;;
-let (--) = function
-  | PInf -> MInf
-  | MInf -> PInf
-  | N n -> N (-n)
-;;
+
 let (>>) a b = match (a, b) with
   | PInf, MInf
   | MInf, PInf -> PInf
@@ -44,8 +40,7 @@ let get_option = function
   | Some e -> e
   | None -> raise Invalid
 ;;
- #use "board.ml";; 
-
+ (* #use "board.ml";; *)
 
  (* Format : [(Piece, (liste des déplacements autorisés, (droit de multiplier par k le mouvement (c'est à dire de se déplacer de plus d'une case), droit de suvoler une pièce) *)
 
@@ -81,10 +76,14 @@ let get_option = function
 	 for i = 0 to 7 do b.(i).(0) <- Piece (inline_piece.(i), White) done;
 	 for i = 0 to 7 do b.(i).(7) <- Piece (inline_piece.(i), Black) done;
 	 board#fill b;
-	 turn <- White
+	 turn <- White;
+	 king_w <- (4,0);
+	 king_b <- (4,7);
+	 castling_w <- (true, 0);
+	 castling_w <- (true, 0)
 
    method print = 
-     let piece_al = 
+     let piece_al () = 
        let stared = function 
 	   Piece (pt, c) -> if c = White then ' ' else '*'  
 	 | _ -> ' '
@@ -106,14 +105,14 @@ let get_option = function
 
 
    method turn = turn
-   method edit_turn = turn <- !!turn
+   method private edit_turn = turn <- !!turn
 
    method  king color = if color = White then king_w else king_b
    method castling color = if color = White then castling_w else castling_b
      
    method moves = moves
 
-   method edit_king color pos = if color = White then king_w <- pos else king_b <- pos
+   method private edit_king color pos = if color = White then king_w <- pos else king_b <- pos
    method private add_move m = moves <- m::moves 
    method private edit_castling color king forward =
      let f = if forward then (+) else (-) in
@@ -171,12 +170,12 @@ let get_option = function
           board#rollback
 
    (* Check if we can castling (never castling and never move king) *)
-   method can_castling = 
+   method private can_castling = 
      let s, n = self#castling turn in
        if n > 0 || s = false then false
        else true
 
-   method mouvements_p (a, b) castling =
+   method private mouvements_p (a, b) castling =
      try 
        let p = get_piece (board#get_point (a, b)) in
 	 (* On récupère les mouvements de la piece *)
@@ -192,7 +191,6 @@ let get_option = function
 		 nl := List.map (fun (x, y) -> ((a+x, b+y), Knight)) pl@(!nl);
 		 
 		 (* On rajoute le roque  *)
-		 
 		 if castling && (p = King) && self#can_castling && ((b = 0 && turn = White) || (b = 7 && turn = Black)) then 
 		   nl := [((a-2, b), Queen); ((a+2, b), Queen)]@(!nl);
 		 
@@ -269,7 +267,7 @@ let get_option = function
       end
       else (false, None)
 
-   method available_move (a,b) (a', b') p_prom  castling= 
+   method private available_move (a,b) (a', b') p_prom  castling= 
      (* la piece a bouger et sa destination sont dans l'echequier *)
      if not (board#in_bounds (a, b) && board#in_bounds (a', b')) then (false, None)
      else
@@ -340,7 +338,7 @@ let get_option = function
    method private printc (a, b) = 
      print_int a; print_string " : "; print_int b; print_newline()
 
-   method get_all check_king castling = 
+   method private get_all check_king castling = 
      let list = ref [] in
       for i = 0 to 7 do
          for j = 0 to 7 do
@@ -355,29 +353,26 @@ let get_option = function
              done
        done; 
        !list
+   method get_moves check_king = 
+     self#get_all check_king true
+       
 
+   method eval = 
+     let p = board#get_point (self#king turn) in
+       (* Si le roi est mort *)
+       if p = Empty || get_piece p <> King || get_color p <> turn then MInf
+       else N 0
  end
 
 
 let play game = 
-   let l =  (game#get_all true true) in
+   let l =  (game#get_moves true) in
    let c = List.nth l (Random.int (List.length l)) in
      game#move_piece c;
-     game#print
 ;;
 
+Random.self_init();;
 let g = new chess;;
 g#init;;
+try for i = 0 to 1000 do play g done with _ -> ();;
 g#print;;
-g#moves;;
-g#turn;;
-g#print;;
-g#moves;;
-for i = 0 to 10 do play g done;;
-play g;;
-g#get_all true true;;
-g#get_all true true;;
-for i = 0 to 5 do play g done;;
-g#moves;;
-g#cancel;;
-play g;;
