@@ -168,6 +168,11 @@ let get_option = function
 	 | _ -> () 
      with _ -> ()
 
+   method can_castling = 
+     let s, n = self#castling turn in
+       if n > 0 || s = false then false
+       else true
+
    method  mouvements_p (a, b) p castling  =
      (* On récupère les mouvements de la piece *)
     let _, (l, (mult, _)) = List.find (fun (x, y) -> x = p) mouvements in
@@ -183,7 +188,7 @@ let get_option = function
 
 	      (* On rajoute le roque  *)
 	    let nl'' = 
-	      if castling && (p = King) && ((b = 0 && turn = White) || (b = 7 && turn = Black)) then  
+	      if castling && (p = King) && self#can_castling && ((b = 0 && turn = White) || (b = 7 && turn = Black)) then  
 		[((a-2, b), Queen); ((a+2, b), Queen)] 
 	      else  [] in
 
@@ -216,8 +221,7 @@ let get_option = function
 	    else false
 	| _ -> false
    method private check_castling (a, b) (a', b') = 
-     let s, n = self#castling turn in
-       if n > 0 || (not s) then false
+       if not self#can_castling then false
        else if not (b = b') then false
        else if b = 0 && turn = Black then false
        else if b = 7 && turn = White then false
@@ -301,10 +305,12 @@ let get_option = function
 		       if prom then (true, Some (Prom((a, b), (a', b'), p_prom))) else (true, Some (Dep((a, b), (a', b'))))
 		     else (false, None)
 	     | Piece(p, c) ->
+		 let r = 
 		 (* Si c'est un roque *)
 		  if p = King && castling && self#check_castling (a, b) (a', b') then 
 		       (true, Some (Castling((a, b), (a', b'))))
 		  else 
+		   ( if p = King then print_string "ok";
 		 let _, (l, (dep, flyover)) = List.find (fun x -> fst x = p) mouvements in
 		   (* k représente la distance en cases entre la d'arrivée et de départ pour le fou, le roi, la dame et la tour. *)
 
@@ -325,7 +331,8 @@ let get_option = function
 		     if r then (true, Some (Dep((a, b), (a', b'))))
 		     else (false, None)
 		   else if board#get_interval ((=) Empty) (a, b) (a', b') mvt then (true, Some (Dep((a, b), (a', b'))))
-		   else (false, None)
+		   else (false, None))
+		 in print_string "ok2"; r
 		      
 	     | _ -> (false, None)
 
@@ -341,7 +348,7 @@ let get_option = function
 		 self#printc (i, j);
 		 let l = self#mouvements_p (i, j) (get_piece pp) castling in
 		   print_string "ok";
-		   let nl = List.map (fun (c, prom) -> (if check_king then self#check_move else self#is_check_move) (i, j) c prom castling) l in 
+		   let nl = List.map (fun (c, prom) -> (self#printc c; self#is_check_move) (i, j) c prom castling) l in 
 		 let nl = List.filter (fun (r, x) -> r = true) nl in  
 		   list := List.map (fun (_, dep) -> (get_option dep)) nl @ !list;
 	       )
@@ -363,8 +370,19 @@ let get_option = function
  g#edit_king White (2,2);;
  g#edit_king Black (4,6);;
  g#print;;
- g#get_moves false;;
- let l = g#moves;;
+ g#get_moves true;;
+g#edit_turn;; 
+g#is_check_move (1,0) (1,1) Queen true;;
+ g#castling White;;
+g#mouvements_p (6,7) King true;; 
+
+
+
+
+
+
+
+let l = g#moves;;
  List.iter g#move_piece l;;
 let play game = 
    let l =  (game#get_moves true) in
@@ -373,7 +391,9 @@ let play game =
      game#move_piece c;
      game#print
 ;;
-play g;;
+for i = 0 to 10 do play g done;;
+
+
 Random.self_init();;
 let g = new chess;;
 g#init;;
