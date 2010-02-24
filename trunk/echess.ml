@@ -1,8 +1,8 @@
 open Xboard
 open Chess
-
+open ExtendN
 let play game prof = 
-  let s, c = alphabeta game prof in
+  let s, c = alphabeta game MInf PInf prof in
     game#move_piece c;
     s
 
@@ -12,7 +12,7 @@ let xboard () =
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	let _, c = alphabeta game 3 in
+	let _, c = alphabeta game MInf PInf 4 in
 	  game#move_piece c;
 	  xboard#play c;
 	   interact()
@@ -34,7 +34,7 @@ let xboard () =
 	interact()
 ;;
 let debug () = 
-  let prof = ref 3 in
+  let prof = ref 5 in
   let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
   let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
   let rec loop game = 

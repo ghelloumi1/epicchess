@@ -31,8 +31,8 @@ module ExtendN = struct
   let string_of_score = function
    | MInf -> "-oo"
    | PInf -> "+oo"
-   | N n -> string_of_int n
-end open ExtendN;;
+   | N n -> string_of_int n;;
+end;; open ExtendN
 
 type dep = 
     Castling of (int * int) * (int * int)
@@ -135,9 +135,9 @@ let get_option = function
      
    method moves = moves
 
-   method private edit_king color pos = if color = White then king_w <- pos else king_b <- pos
+   method edit_king color pos = if color = White then king_w <- pos else king_b <- pos
    method private add_move m = moves <- m::moves 
-   method private edit_castling color king forward =
+   method edit_castling color king forward =
      let f = if forward then (+) else (-) in
      let r = match self#castling color with 
 	 (r, s) -> if king then (r, f s 1) else (not forward, s) in
@@ -420,18 +420,33 @@ let get_option = function
 
 
 
-let rec alphabeta game prof =
-  let rec loop best = function
-    | [] -> best
+let rec alphabeta game alpha beta prof =
+  let rec loop best al bt = function
+    | [] -> 
+	let sb, cb = best in
+	  (* Si on a perdu dans tous les cas *)
+	  if sb = MInf then 
+	    let lm = game#get_moves true in
+	      if lm <> [] then (MInf, List.hd lm)
+	      else
+		if game#is_check (game#king (game#turn)) then best
+		else
+		  (* Si il y a pat *)
+		  (N 0, cb)
+	  else
+	    best
     | (s, mvt)::tail ->
 	game#move_piece mvt;
 	let score = 
 	  if prof = 0 || s = PInf || s = MInf then s
-	  else let  s, _ = alphabeta game (prof-1) in (--) s
+	  else let  s, _ = alphabeta game ((--) bt) ((--) al) (prof-1) in (--) s
 	in
 	game#cancel;
 	  let n_best = if score >>= (fst best) then (score, mvt) else best in
-	      loop n_best tail
+	  let n_alpha = if fst n_best >>= al then fst n_best else al in
+	    if n_alpha >> bt then n_best
+	    else
+	      loop n_best n_alpha bt tail
   in
   (* On récupère et on trie les coups possibles *)
   let l = game#get_moves false in
@@ -439,43 +454,15 @@ let rec alphabeta game prof =
 		       game#move_piece mvt; 
 		       let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
 		    ) l in
-  let l' = List.sort (fun ( _, a) (_, b) -> compare b a) nl in
-    loop (MInf, Dep((0,0), (0,0)))  l'
+  let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
+    loop (MInf, Dep((0,0), (0,0))) alpha beta l'
 ;;
 
-
-(*
-let _ = 
-  let prof = ref 3 in
-  let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
-  let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
-  let rec loop game = 
-    let s = read_line() in
-      try
-        let r = scan_prof s in prof := r; loop game
-      with _ ->
-        (try
-           let a, f = scan_move s in
-           let r, mvt = game#check_move a f Queen true in
-             if not r then (print_endline "Invalid mouvement"; loop game)
-             else
-               (
-		 game#move_piece (get_option mvt);
-                   game#print;
-                   let s = play game !prof in 
-                     game#print;
-                     print_endline (print_score s); 
-                     loop game
-	       )
-              
-	 with _ -> print_endline "Invalid command"; loop game)
-  in
-  let game = new chess in
-    game#init;
-    game#print;
-    let s = play game !prof in
-      print_endline (print_score s); 
-      game#print;
-      loop game
-;;
-*)
+let b = Array.make_matrix 8 8 Empty;;
+b.(1).(5) <- Piece(Queen, White);;
+b.(2).(4) <- Piece(King, White);;
+b.(1).(7) <- Piece(King, Black);;
+let g = new chess;;
+g#apply b;;
+g#edit_king;;
+g#print;;
