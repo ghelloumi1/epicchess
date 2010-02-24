@@ -384,41 +384,69 @@ let get_option = function
    method eval color = 
      let rec points = [(Pawn, 15); (Knight, 45); (Bishop, 45); (Rook, 150); (Queen, 300); (King, 0)] in
      let board_center = [|
-       [|  0;  0;  0;  0;  0;  0;  0;  0|];
-       [|  0;  0;  0;  0;  0;  0;  0;  0|];
-       [|  0;  0;  3;  5;  5;  3;  0;  0|];
-       [|  0;  0;  5;  9;  9;  5;  0;  0|];
-       [|  0;  0;  5;  9;  9;  5;  0;  0|];
-       [|  0;  0;  3;  5;  5;  3;  0;  0|];
-       [|  0;  0;  0;  0;  0;  0;  0;  0|];
-       [|  0;  0;  0;  0;  0;  0;  0;  0|]
-     |]
-     in
+       [|  0;  1;  2;  3;  3;  2;  1;  0|];
+       [|  1;  3;  4;  5;  5;  4;  3;  1|];
+       [|  2;  4;  6;  7;  7;  6;  4;  2|];
+       [|  3;  5;  7;  9;  9;  7;  5;  3|];
+       [|  3;  5;  7;  9;  9;  7;  5;  3|];
+       [|  2;  4;  6;  7;  7;  6;  4;  2|];
+       [|  1;  3;  4;  5;  5;  4;  3;  1|];
+       [|  0;  1;  2;  3;  3;  2;  1;  0|];
+     |] in
+     let bishop_gradient = [|
+       [|  3;  2;  1;  0;  0;  1;  2;  3  |];
+       [|  2;  4;  5;  5;  5;  5;  4;  2  |];
+       [|  1;  5;  8; 10;  10;  8;  5;  1 |];
+       [|  0;  5;  10; 11; 11;  10;  5;  0|];
+       [|  0;  5;  10; 11; 11;  10;  5;  0|];
+       [|  1;  5;  8; 10;  10;  8;  5;  1 |];
+       [|  2;  4;  5;  5;  5;  5;  4;  2  |];
+       [|  3;  2;  1;  0;  0;  1;  2;  3  |];
+     |] in
+
      let eval_b color = 
        let s = ref 0 in
+       let nb_bishop = ref 0 in
 	 for i = 0 to 7 do
            for j = 0 to 7 do
              let p = board#get_point(i, j) in
              let r = 
 	       begin match p with
-                   Piece(p, c) when c = color-> snd (List.find (fun (a, b) -> a = p) points) + board_center.(i).(j)
+		 | Piece(Bishop, c) when c = color -> 
+		     nb_bishop := !nb_bishop +1; 
+		     snd (List.find (fun (a, b) -> a = Bishop) points) +  bishop_gradient.(i).(j)
+                 |  Piece(p, c) when c = color-> 
+		      snd (List.find (fun (a, b) -> a = p) points) + board_center.(i).(j)
 		 | _ -> 0
 	       end in      
 	       s := !s + r 
            done
 	 done;
-	 !s in
-     let eval_castling c = if not (fst (self#castling c)) then 10 else 0 in
+	 !s + (if !nb_bishop >= 2 then 5 else 0)
+     in
+     let double_pawn color = 
+       let s = ref 0 in
+       for i = 0 to 7 do
+	 for j = 0 to 3 do
+	   match (board#get_point(i, j), board#get_point (i, j+1)) with
+	     | Piece(Pawn, c1), Piece(Pawn, c2) when c1 = c2 -> 
+		 s := !s + (if c1 = color then (-4) else 4)
+	     | _ -> ()
+	 done
+       done;
+	 !s
+     in
      let p = board#get_point (self#king color) in
+     let p' = board#get_point (self#king (!!color)) in
        if p = Empty || get_piece p <> King || get_color p <> color then MInf
+       else if p' = Empty || get_piece p' <> King || get_color p' <> (!!color) then PInf
        else 
-	 let p' = board#get_point (self#king (!!color)) in
-	     if p' = Empty || get_piece p' <> King || get_color p' <> (!!color) then PInf
-	     else N (eval_b color - eval_b (!!color) + eval_castling color - eval_castling (!!color))
+	 let eval_castling c = if not (fst (self#castling c)) then 10 else 0 in
+	       N ( eval_b color - eval_b (!!color) + 
+		   eval_castling color - eval_castling (!!color) + 
+		   double_pawn color
+		 )
  end
-
-
-
 
 let rec alphabeta game alpha beta prof =
   let rec loop best al bt = function
@@ -457,12 +485,3 @@ let rec alphabeta game alpha beta prof =
   let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
     loop (MInf, Dep((0,0), (0,0))) alpha beta l'
 ;;
-
-let b = Array.make_matrix 8 8 Empty;;
-b.(1).(5) <- Piece(Queen, White);;
-b.(2).(4) <- Piece(King, White);;
-b.(1).(7) <- Piece(King, Black);;
-let g = new chess;;
-g#apply b;;
-g#edit_king;;
-g#print;;
