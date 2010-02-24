@@ -1,85 +1,23 @@
-open Printf
-open Sys
+open Xboard
 open Chess
-open Str
-(* #use "chessclasses.ml";; *)
-class xboard =
-object (self)
-  val piece_chars = [(King, 'K'); (Queen, 'Q'); (Rook, 'R'); (Bishop, 'B'); (Knight, 'N'); (Pawn, 'P')]
-  method private rassoc x lst =
-    match lst with
-    | [] -> raise Not_found
-    | (a, b) :: t -> if x = b then a else self#rassoc x t
 
-  method private piece_type_of_char c = self#rassoc (Char.uppercase c) piece_chars
-  method private char_of_piece_type pt = List.assoc pt piece_chars
+let play game prof = 
+  let s, c = alphabeta game prof in
+    game#move_piece c;
+    s
 
-  method private int_of_char c = int_of_char c - int_of_char '0' - 1
-  method private int_of_letter x = 
-    let x = Char.lowercase x in
-    if 'a' <= x && x <= 'h' 
-        then int_of_char x - int_of_char 'a'
-        else raise Not_found
-  method private letter_of_int x = "abcdefgh".[x]
-
-  method private is_digit c = '0' <= c && c <= '9'
-
-  method private castling_line game = 
-    if game#turn = White then 0 else 7
-  method private promotion_line game = 
-    if game#turn = White then 6 else 1
-  method private last_line game = 
-    if game#turn = White then 7 else 0
-
-  method init =  set_signal sigint Signal_ignore
-  method parse_move (game:chess) str = 
-    try
-    Some (match str with
-        | "O-O"   -> Castling((4, self#castling_line game), (6, self#castling_line game)) 
-	| "O-O-O" -> Castling((4, self#castling_line game), (2, self#castling_line game)) 
-	| s -> 
-	   let a, b, a', b' = self#int_of_letter s.[0], self#int_of_char s.[1],  self#int_of_letter s.[2],  self#int_of_char s.[3] in
-            (match String.length s with
-            | 4 ->
-		let r, d = game#check_move (a, b) (a', b') Queen true in
-		  get_option d
-            | 5 when (self#is_digit s.[1] && self#is_digit s.[3]) ->
-		let r, d = game#check_move (a, b) (a', b') (self#piece_type_of_char s.[4]) true in
-		  if r then get_option d else raise Exit
-            | _ -> raise Exit)
-	 )
-    with _ -> None
-  method private show_move= function
-    | Dep((a, b), (a', b')) 
-    | Enpassant((a, b), (a', b')) -> sprintf "%c%d%c%d"  (self#letter_of_int a) (b+1) (self#letter_of_int a') (b'+1)
-    | Castling((a, b), (a', b')) when a' < a -> "O-O-O"
-    | Castling(_, _) -> "O-O"
-    | Prom((a, b), (a', b'), p) ->
-	sprintf "%c%d%c%d%c" (self#letter_of_int a) (b+1) 
-	                     (self#letter_of_int a') (b'+1) (self#char_of_piece_type p)
-  method play m = 
-    print_endline ("move "^(self#show_move m));  self#flush
-
-  method flush = Pervasives.flush Pervasives.stdout
-
-end
-
-let () = 
+let xboard () = 
   let game = new chess  in
     game#init;
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	 let _, c = alphabeta game 3 in
-	   game#move_piece c;
-	   xboard#play c;
+	ignore(play game 1);
 	   interact()
-	
-	
       and interact () = 
 	let str = read_line () in
 	  (match Str.split (Str.regexp " ") str with
-	     | ["xboard"] -> printf "feature myname=\"EpicChess\" done=1\n"; xboard#flush; interact()
+	     | ["xboard"] -> Printf.printf "feature myname=\"EpicChess\" done=1\n"; xboard#flush; interact()
 	     | ["quit"] ->  raise Exit
 	     | s -> 
 		 (match xboard#parse_move game (List.hd s) with 
@@ -92,3 +30,43 @@ let () =
 	  )
       in
 	interact()
+;;
+let debug () = 
+  let prof = ref 3 in
+  let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
+  let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
+  let rec loop game = 
+    let s = read_line() in
+      try
+        let r = scan_prof s in prof := r; loop game
+      with _ ->
+        (try
+           let a, f = scan_move s in
+           let r, mvt = game#check_move a f Queen true in
+             if not r then (print_endline "Invalid mouvement"; loop game)
+             else
+	       (
+		 game#move_piece (get_option mvt);
+                 game#print;
+                 let s = play game !prof in 
+                   game#print;
+                   print_endline (ExtendN.string_of_score s); 
+                   loop game
+	       )
+		 
+	 with _ -> print_endline "Invalid command"; loop game)
+  in
+  let game = new chess in
+    game#init;
+    game#print;
+    let s = play game !prof in
+      print_endline (ExtendN.string_of_score s); 
+      game#print;
+      loop game
+;;
+
+let _ = 
+  let debug = ref "0" in
+  let arguments = ["-d", Arg.Set_string debug, "1 or 0 : debug mode or not"] in
+  Arg.parse arguments (fun _ -> ()) "Usage: see manual.";
+    if (!debug) = "0" then xboard() else ()
