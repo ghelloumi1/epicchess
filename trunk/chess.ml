@@ -1,4 +1,3 @@
-open Printf
 open Board
 type piece_type = King | Queen | Rook | Bishop | Knight | Pawn
 type color = Black | White
@@ -33,9 +32,7 @@ module ExtendN = struct
    | MInf -> "-oo"
    | PInf -> "+oo"
    | N n -> string_of_int n
-end
-
-open ExtendN;;
+end open ExtendN;;
 
 type dep = 
     Castling of (int * int) * (int * int)
@@ -101,7 +98,7 @@ let get_option = function
      let print_castling c = 
        let cas, k = self#castling c in
        let s = if c = White then "White" else "Black" in
-	 printf "%s castling : %b, %d \n" s cas k
+	 Printf.printf "%s castling : %b, %d \n" s cas k
      in
 
      let piece_al () = 
@@ -124,8 +121,8 @@ let get_option = function
        print_string "other king : "; self#printc (self#king (!!turn));
        print_castling turn;
        print_castling (!!turn);
-       printf "your score : %s\n" (string_of_score (self#eval turn));
-       printf "other score : %s" (string_of_score (self#eval (!!turn)));
+       Printf.printf "your score : %s\n" (string_of_score (self#eval turn));
+       Printf.printf "other score : %s" (string_of_score (self#eval (!!turn)));
        board#print piece_al
 
 

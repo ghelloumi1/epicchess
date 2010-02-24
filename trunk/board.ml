@@ -1,6 +1,3 @@
-open Array
-open Printf 
-
 (* http://paste.pocoo.org/show/177553/ *)
 
 exception Fill_InvalidSize
@@ -17,9 +14,9 @@ type accessor =
 let (++) (a,b) (c,d) = (a+c) , (b+d)
 
 let copy_matrix m (sx,sy) def =
-  let r = make_matrix sx sy def in
+  let r = Array.make_matrix sx sy def in
     for i = 0 to sx-1 do
-      r.(i) <- copy m.(i)
+      r.(i) <- Array.copy m.(i)
     done;
     r
 
@@ -61,7 +58,7 @@ let test = [| [| 1; 4; 7|];
 
 class ['a] board (sx, sy) empty = 
 object (self)
-  val mutable board = make_matrix sx sy (empty : 'a)
+  val mutable board = Array.make_matrix sx sy (empty : 'a)
   val mutable in_move = false
   val mutable move_content = []
   val mutable history = []
@@ -74,9 +71,9 @@ object (self)
   method rollback = 
     let rollback' xs = List.map (fun (pos, e) -> self#raw_set pos e) xs
     and (hd, tl) = cut history
-    in if in_move 
-      then raise InMove_Rollback 
-      else rollback' hd; history <- tl
+    in 
+      if not in_move then begin ignore (rollback' hd); history <- tl;  end
+      else raise InMove_Rollback
     
   method private log move = if in_move then move_content <- (move::move_content) else ()
 
@@ -86,25 +83,25 @@ object (self)
     in n#fill board; n 
 	
   method fill nb = 
-    let p  = length nb = sx
-    and p' = snd (fold_left (fun (s, valid) e -> if (length e = s && length e = sy) && (valid = true)
+    let p  = Array.length nb = sx
+    and p' = snd (Array.fold_left (fun (s, valid) e -> if (Array.length e = s && Array.length e = sy) && (valid = true)
 			     then (s, true) else (s, false)) 
-		    (length nb.(0),true) nb)
+		    (Array.length nb.(0),true) nb)
     in if p && p' then board <- (copy_matrix nb (sx,sy) empty) else (raise Fill_InvalidSize)
 	
   (* The association list is of type (key, (char_value, pred)). The predicates return a char added after the char_value (used to differenciate colors, for ex *)
   method print al = (* Takes an association list to know how to represent various types *)
     let separator = repeat "-----+" sx in
-      print_string "\n   +"; List.map print_string separator; print_string "\n";
+      print_string "\n   +"; List.iter print_string separator; print_string "\n";
       for j = sy-1 downto 0 do
-	printf " %d |" (j);
+	Printf.printf " %d |" (j);
 	for i = 0 to sx-1 do
 	  match self#raw_get (i,j) with
 	    | e when e = empty -> print_string "     |"
 	    | e -> let (char_val, pred) = lookup e (al ())
-	      in printf " %c%c  |" (pred e) char_val 
+	      in Printf.printf " %c%c  |" (pred e) char_val 
 	done;
-	print_string "\n   +"; List.map print_string separator; print_string "\n";
+	print_string "\n   +"; List.iter print_string separator; print_string "\n";
       done;
       let repeat_nums = repeat_num sx 0
       and repeat_space = repeat "     " sx
