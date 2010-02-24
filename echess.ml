@@ -12,7 +12,9 @@ let xboard () =
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	ignore(play game 1);
+	let _, c = alphabeta game 3 in
+	  game#move_piece c;
+	  xboard#play c;
 	   interact()
       and interact () = 
 	let str = read_line () in
@@ -61,12 +63,10 @@ let debug () =
     game#print;
     let s = play game !prof in
       print_endline (ExtendN.string_of_score s); 
-      game#print;
-      loop game
+      game#print; ignore (loop game)
 ;;
-
 let _ = 
-  let debug = ref "0" in
-  let arguments = ["-d", Arg.Set_string debug, "1 or 0 : debug mode or not"] in
+  let d = ref "0" in
+  let arguments = ["-d", Arg.Set_string d, "1 or 0 : debug mode or not"] in
   Arg.parse arguments (fun _ -> ()) "Usage: see manual.";
-    if (!debug) = "0" then xboard() else ()
+    if (!d) = "0" then xboard() else debug()
