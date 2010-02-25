@@ -52,7 +52,6 @@ let get_option = function
   | Some e -> e
   | None -> raise Invalid
 ;;
-(*  #use "board.ml";; *)
 
  (* Format : [(Piece, (liste des déplacements autorisés, (droit de multiplier par k le mouvement (c'est à dire de se déplacer de plus d'une case), droit de suvoler une pièce) *)
 
@@ -78,7 +77,7 @@ let get_option = function
    val mutable castling_b = (true, 0)
 
    val mutable moves = []
-     
+   
    method apply b = board#fill b
    method init = 
      let b = Array.make_matrix 8 8 Empty in
@@ -394,16 +393,17 @@ let get_option = function
        [|  0;  1;  2;  3;  3;  2;  1;  0|];
      |] in
      let bishop_gradient = [|
-       [|  3;  2;  1;  0;  0;  1;  2;  3  |];
-       [|  2;  4;  5;  5;  5;  5;  4;  2  |];
-       [|  1;  5;  8; 10;  10;  8;  5;  1 |];
-       [|  0;  5;  10; 11; 11;  10;  5;  0|];
-       [|  0;  5;  10; 11; 11;  10;  5;  0|];
-       [|  1;  5;  8; 10;  10;  8;  5;  1 |];
-       [|  2;  4;  5;  5;  5;  5;  4;  2  |];
-       [|  3;  2;  1;  0;  0;  1;  2;  3  |];
+       [|  3;  2;  1;  0;  0;  1;  2;  3 |];
+       [|  2;  4;  5;  5;  5;  5;  4;  2 |];
+       [|  1;  5;  8;  10; 10; 8;  5;  1 |];
+       [|  0;  5;  10; 11; 11; 10; 5;  0 |];
+       [|  0;  5;  10; 11; 11; 10; 5;  0 |];
+       [|  1;  5;  8;  10; 10; 8;  5;  1 |];
+       [|  2;  4;  5;  5;  5;  5;  4;  2 |];
+       [|  3;  2;  1;  0;  0;  1;  2;  3 |];
      |] in
 
+     let get_score p = snd (List.find (fun (a, b) -> a = p) points) in
      let eval_b color = 
        let s = ref 0 in
        let nb_bishop = ref 0 in
@@ -412,11 +412,18 @@ let get_option = function
              let p = board#get_point(i, j) in
              let r = 
 	       begin match p with
+		 | Piece(Rook, c) when c = color ->
+		     let l1, l2 =  board#get (Vertical (i,j)),  board#get (Horizontal (i,j)) in
+		     let is_empty l = if not (List.exists ((<>) Empty) l) then 7 else 0 in
+		     (is_empty l1) + (is_empty l2) + get_score Rook
+
 		 | Piece(Bishop, c) when c = color -> 
 		     nb_bishop := !nb_bishop +1; 
-		     snd (List.find (fun (a, b) -> a = Bishop) points) +  bishop_gradient.(i).(j)
-                 |  Piece(p, c) when c = color-> 
-		      snd (List.find (fun (a, b) -> a = p) points) + board_center.(i).(j)
+		     get_score Bishop +  bishop_gradient.(i).(j)
+                 |  Piece(p, c) when c = color && List.mem p [Knight; Pawn]-> 
+		      get_score Knight + board_center.(i).(j)
+		 | Piece(p, c) when c = color ->
+		     get_score p
 		 | _ -> 0
 	       end in      
 	       s := !s + r 
