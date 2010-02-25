@@ -12,7 +12,7 @@ let xboard () =
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	let _, c = alphabeta game MInf PInf 4 in
+	let _, c = alphabeta game MInf PInf 3 in
 	  game#move_piece c;
 	  xboard#play c;
 	   interact()
