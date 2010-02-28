@@ -381,13 +381,13 @@ let get_option = function
        
 
    method eval color = 
-     let rec points = [(Pawn, 15); (Knight, 45); (Bishop, 45); (Rook, 150); (Queen, 300); (King, 0)] in
+     let rec points = [(Pawn, 40); (Knight, 120); (Bishop, 120); (Rook, 210); (Queen, 400); (King, 0)] in
      let board_center = [|
        [|  0;  1;  2;  3;  3;  2;  1;  0|];
        [|  1;  3;  4;  5;  5;  4;  3;  1|];
        [|  2;  4;  6;  7;  7;  6;  4;  2|];
-       [|  3;  5;  7;  9;  9;  7;  5;  3|];
-       [|  3;  5;  7;  9;  9;  7;  5;  3|];
+       [|  3;  5;  7;  11;  11;  7;  5;  3|];
+       [|  3;  5;  7;  12;  12;  7;  5;  3|];
        [|  2;  4;  6;  7;  7;  6;  4;  2|];
        [|  1;  3;  4;  5;  5;  4;  3;  1|];
        [|  0;  1;  2;  3;  3;  2;  1;  0|];
@@ -421,7 +421,7 @@ let get_option = function
 		     nb_bishop := !nb_bishop +1; 
 		     get_score Bishop +  bishop_gradient.(i).(j)
                  |  Piece(p, c) when c = color && List.mem p [Knight; Pawn]-> 
-		      get_score Knight + board_center.(i).(j)
+		      get_score p + board_center.(i).(j)
 		 | Piece(p, c) when c = color ->
 		     get_score p
 		 | _ -> 0
@@ -455,40 +455,5 @@ let get_option = function
 		 )
  end
 
-let rec alphabeta game alpha beta prof =
-  let rec loop best al bt = function
-    | [] -> 
-	let sb, cb = best in
-	  (* Si on a perdu dans tous les cas *)
-	  if sb = MInf then 
-	    let lm = game#get_moves true in
-	      if lm <> [] then (MInf, List.hd lm)
-	      else
-		if game#is_check (game#king (game#turn)) then best
-		else
-		  (* Si il y a pat *)
-		  (N 0, cb)
-	  else
-	    best
-    | (s, mvt)::tail ->
-	game#move_piece mvt;
-	let score = 
-	  if prof = 0 || s = PInf || s = MInf then s
-	  else let  s, _ = alphabeta game ((--) bt) ((--) al) (prof-1) in (--) s
-	in
-	game#cancel;
-	  let n_best = if score >>= (fst best) then (score, mvt) else best in
-	  let n_alpha = if fst n_best >>= al then fst n_best else al in
-	    if n_alpha >> bt then n_best
-	    else
-	      loop n_best n_alpha bt tail
-  in
-  (* On récupère et on trie les coups possibles *)
-  let l = game#get_moves false in
-  let nl = List.map (fun mvt -> 
-		       game#move_piece mvt; 
-		       let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
-		    ) l in
-  let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
-    loop (MInf, Dep((0,0), (0,0))) alpha beta l'
+
 ;;
