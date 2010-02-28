@@ -1,19 +1,20 @@
 open Xboard
 open Chess
 open ExtendN
-let play game prof = 
-  let s, c = alphabeta game MInf PInf prof in
-    game#move_piece c;
+open Ia
+let play g prof = 
+  let s, c = g#alphabeta  prof in
+    g#game#move_piece c;
     s
 
 let xboard () = 
-  let game = new chess  in
-    game#init;
+  let g = new ia  in
+    g#game#init;
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	let _, c = alphabeta game MInf PInf 3 in
-	  game#move_piece c;
+	let _, c = g#alphabeta 4 in
+	  g#game#move_piece c;
 	  xboard#play c;
 	   interact()
       and interact () = 
@@ -22,9 +23,9 @@ let xboard () =
 	     | ["xboard"] -> Printf.printf "feature myname=\"EpicChess\" done=1\n"; xboard#flush; interact()
 	     | ["quit"] ->  raise Exit
 	     | s -> 
-		 (match xboard#parse_move game (List.hd s) with 
+		 (match xboard#parse_move g#game (List.hd s) with 
 		    | Some c -> 
-			game#move_piece c;
+			g#game#move_piece c;
 			think();
 		    | None -> 
 			interact()
@@ -34,36 +35,36 @@ let xboard () =
 	interact()
 ;;
 let debug () = 
-  let prof = ref 5 in
+  let prof = ref 0 in
   let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
   let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
-  let rec loop game = 
+  let rec loop g = 
     let s = read_line() in
       try
-        let r = scan_prof s in prof := r; loop game
+        let r = scan_prof s in prof := r; loop g
       with _ ->
         (try
            let a, f = scan_move s in
-           let r, mvt = game#check_move a f Queen true in
-             if not r then (print_endline "Invalid mouvement"; loop game)
+           let r, mvt = g#game#check_move a f Queen true in
+             if not r then (print_endline "Invalid mouvement"; loop g)
              else
 	       (
-		 game#move_piece (get_option mvt);
-                 game#print;
-                 let s = play game !prof in 
-                   game#print;
+		 g#game#move_piece (get_option mvt);
+                 g#game#print;
+                 let s = play g !prof in 
+                   g#game#print;
                    print_endline (ExtendN.string_of_score s); 
-                   loop game
+                   loop g
 	       )
 		 
-	 with _ -> print_endline "Invalid command"; loop game)
+	 with _ -> print_endline "Invalid command"; loop g)
   in
-  let game = new chess in
-    game#init;
-    game#print;
-    let s = play game !prof in
+  let g = new ia in
+    g#game#init;
+    g#game#print;
+    let s = play g !prof in
       print_endline (ExtendN.string_of_score s); 
-      game#print; ignore (loop game)
+      g#game#print; ignore (loop g)
 ;;
 let _ = 
   let d = ref "0" in

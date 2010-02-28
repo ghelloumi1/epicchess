@@ -95,19 +95,3 @@ object (self)
   method get_b = book
 end
 ;;
-
-let _ = 
-  let turn = ref White in
-  let m  = new opening in
-    m#fill_book "book2.pgn" White;
-    for i = 0 to 200 do
-      begin match m#get_move !turn with
-	| Some (c, n) -> Printf.printf "%s : %d\n" c n
-	| None -> ()
-      end;
-      turn := !!(!turn)
-    done
-
-	
-	  
-	  
