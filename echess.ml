@@ -3,7 +3,7 @@ open Chess
 open ExtendN
 open Ia
 let play g prof = 
-  let s, c = g#alphabeta  prof in
+  let s, c = g#alphabeta prof in
     g#game#move_piece c;
     s
 
@@ -35,7 +35,7 @@ let xboard () =
 	interact()
 ;;
 let debug () = 
-  let prof = ref 0 in
+  let prof = ref 3 in
   let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
   let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
   let rec loop g = 
@@ -63,7 +63,7 @@ let debug () =
     g#game#init;
     g#game#print;
     let s = play g !prof in
-      print_endline (ExtendN.string_of_score s); 
+      print_endline (ExtendN.string_of_score s);
       g#game#print; ignore (loop g)
 ;;
 let _ = 

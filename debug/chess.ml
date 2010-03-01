@@ -381,13 +381,13 @@ let get_option = function
        
 
    method eval color = 
-     let rec points = [(Pawn, 15); (Knight, 45); (Bishop, 45); (Rook, 150); (Queen, 300); (King, 0)] in
+     let rec points = [(Pawn, 40); (Knight, 120); (Bishop, 120); (Rook, 210); (Queen, 400); (King, 0)] in
      let board_center = [|
        [|  0;  1;  2;  3;  3;  2;  1;  0|];
        [|  1;  3;  4;  5;  5;  4;  3;  1|];
        [|  2;  4;  6;  7;  7;  6;  4;  2|];
-       [|  3;  5;  7;  9;  9;  7;  5;  3|];
-       [|  3;  5;  7;  9;  9;  7;  5;  3|];
+       [|  3;  5;  7;  11;  11;  7;  5;  3|];
+       [|  3;  5;  7;  12;  12;  7;  5;  3|];
        [|  2;  4;  6;  7;  7;  6;  4;  2|];
        [|  1;  3;  4;  5;  5;  4;  3;  1|];
        [|  0;  1;  2;  3;  3;  2;  1;  0|];
@@ -421,7 +421,7 @@ let get_option = function
 		     nb_bishop := !nb_bishop +1; 
 		     get_score Bishop +  bishop_gradient.(i).(j)
                  |  Piece(p, c) when c = color && List.mem p [Knight; Pawn]-> 
-		      get_score Knight + board_center.(i).(j)
+		      get_score p + board_center.(i).(j)
 		 | Piece(p, c) when c = color ->
 		     get_score p
 		 | _ -> 0
