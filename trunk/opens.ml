@@ -40,7 +40,7 @@ object (self)
       match file with
 	| Some c -> parse_game (parse c "" false)
 	| None -> raise No_file
-  method  forward = 
+  method private forward = 
      let rec tail acc = function
       | [] -> acc
       | (r, _::l)::list when l <> [] ->

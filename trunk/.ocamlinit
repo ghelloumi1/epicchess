@@ -1,0 +1,7 @@
+#use "topfind";;
+#require "str";;
+#use "board.ml";;
+#use "chess.ml";;
+#use "aux.ml";;
+#use "xboard.ml";;
+#use "opens.ml";;
