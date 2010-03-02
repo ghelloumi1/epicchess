@@ -19,7 +19,7 @@ object (self)
   val mutable book = []
   val mutable file = None
 
-  method parse_pgn = 
+  method private parse_pgn = 
     let rec parse c s in_read = match (input_line c, in_read) with
       | ("", false) -> parse c s true
       | ("", true) -> s
@@ -66,17 +66,17 @@ object (self)
 	  try
 	    while true do
 	      let r, m = self#parse_pgn  in
-		if m <> [] && r = result  then moves := (r, m)::!moves
+		if m <> [] && (r = result || r = Draw) then moves := (r, m)::!moves
 	    done
 	  with End_of_file -> book <- !moves
     with Sys_error _ -> raise No_file
 
-  method select_move move turn = 
-    let f = if turn = White then fst else snd in
-      book <- List.filter (fun (r, l) -> f(List.hd l) = move) book;
-      if turn = Black then self#forward
+  method select_move game move = 
+    let f = if game#turn = White then fst else snd in
+      book <- List.filter (fun (r, l) -> self#pgn_to_move game (f(List.hd l)) = move) book;
+      if game#turn = Black then self#forward
 
-  method get_move turn = 
+  method get_move (game:chess) = 
     let rec max_l me list = match me, list with
       | me, [] -> me
       | Some(c, nm), (s, n)::l -> max_l (Some (if n > nm then (s, n) else (c, nm))) l
@@ -92,22 +92,23 @@ object (self)
 	      max_moves f ((c, 1)::l) tail
     in
 
-    let f = if turn = White then fst else snd in 
+    let f = if game#turn = White then fst else snd in 
     let r = max_moves f [] book in
-      begin match r with
+    let result = begin match r with
 	| Some(m, _) ->
 	   book <- List.filter (fun (r, l) -> f (List.hd l) = m) book; 
-	| None -> ()
-      end;
-      if turn = Black then self#forward;
-      r
+	    Some(self#pgn_to_move game m)
+	| None -> None
+    end in
+      if game#turn = Black then self#forward;
+      result
+
   method get_b = book
 
-  method analyse_move (game:chess) s = 
+  method pgn_to_move (game:chess) s = 
     (* 
        format : 
-       None -> castling
-       Some((x, y), (x', y'), promotion, capture) where 
+       ((x, y), (x', y'), piece, promotion, capture) where 
                               promotion = Some piece | None
                               capture = true | false
     *)
@@ -185,3 +186,27 @@ object (self)
 	      | None -> r
 end
 ;;
+let rec loop game bw bb = 
+  Printf.printf "w : %d, b : %d \n" (List.length (bw#get_b)) (List.length (bb#get_b));
+  game#print;
+  let r = (if game#turn = White then bw else bb)#get_move game in
+    (if game#turn = White then bb else bw)#select_move game (get_option r);
+    game#move_piece (get_option r);
+    loop game bw bb
+;;
+
+let b = new opening;;
+b#fill_book "../chess.pgn" Black;;
+
+
+
+let _ = 
+  let c = new chess in
+    c#init;
+    let bw = new opening in
+      bw#fill_book "book2.pgn" White;
+      print_endline "file white open";
+      let bb = new opening in
+	bb#fill_book "book2.pgn" Black;
+	print_endline "file black open";
+	loop c bw bb
