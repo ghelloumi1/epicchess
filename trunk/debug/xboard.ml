@@ -3,19 +3,12 @@
 
 class xboard =
 object (self)
-  method private castling_line game = 
-    if game#turn = White then 0 else 7
-  method private promotion_line game = 
-    if game#turn = White then 6 else 1
-  method private last_line game = 
-    if game#turn = White then 7 else 0
-
   method init =  Sys.set_signal Sys.sigint Sys.Signal_ignore
   method parse_move (game:chess) str = 
     try
     Some (match str with
-        | "O-O"   -> Castling((4, self#castling_line game), (6, self#castling_line game)) 
-	| "O-O-O" -> Castling((4, self#castling_line game), (2, self#castling_line game)) 
+        | "O-O"   -> Castling((4, castling_line game), (6, castling_line game)) 
+	| "O-O-O" -> Castling((4, castling_line game), (2, castling_line game)) 
 	| s -> 
 	   let a, b, a', b' = int_of_letter s.[0], int_of_char s.[1],  int_of_letter s.[2],  int_of_char s.[3] in
             (match String.length s with
