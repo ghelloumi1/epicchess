@@ -33,21 +33,17 @@ object (self)
 	      else
 		best
 	| (s, mvt)::tail ->
-	    if s = MInf then (s, mvt)
-	    else
-	      begin
 		game#move_piece mvt;
 		let score = 
 		  if prof = 0 || s = MInf || s = PInf then s
 		  else let  s, _ = alphabeta game ((--) bt) ((--) al) false (prof-1) in (--) s
 		in
 		  game#cancel;
-		  let n_best = if score >>= (fst best) then (score, mvt) else best in
-		  let n_alpha = if fst n_best >>= al then fst n_best else al in
-		    if n_alpha >> bt then n_best
-		    else
-		      loop n_best n_alpha bt tail
-	      end
+		    let n_best = if score >>= (fst best) then (score, mvt) else best in
+		    let n_alpha = if fst n_best >>= al then fst n_best else al in
+		      if n_alpha >> bt then n_best
+		      else
+			loop n_best n_alpha bt tail
       in
 	(* On récupère et on trie les coups possibles *)
       let l = game#get_moves ck in

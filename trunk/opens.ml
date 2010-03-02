@@ -3,7 +3,16 @@ exception Invalid_pgn_format;;
 exception No_file
 
 open Chess
+open Aux
 type result = Win | Loose | Draw | Unknow;;
+
+
+
+let remove s i = (String.sub s 0 i)^(String.sub s (i+1) (String.length s - i - 1));;
+let is_letter = function
+  | 'a'..'h' -> true
+  | _ -> false;;
+
 
 class opening = 
 object (self)
@@ -93,5 +102,86 @@ object (self)
       if turn = Black then self#forward;
       r
   method get_b = book
+
+  method analyse_move (game:chess) s = 
+    (* 
+       format : 
+       None -> castling
+       Some((x, y), (x', y'), promotion, capture) where 
+                              promotion = Some piece | None
+                              capture = true | false
+    *)
+    let parse_move s = 
+      let r = ref s in
+      let colone, line, capture = ref None, ref None, ref false in
+      let x, y = ref 0, ref 0 in
+      let piece = ref Pawn in
+      let promotion = ref None in
+	if List.mem s.[0] ['R'; 'Q'; 'B'; 'K'; 'N'] then
+	      begin
+		piece := piece_type_of_char (s.[0]);
+		r := remove s 0
+	      end;
+
+	    if (is_letter !r.[0]) && (is_letter !r.[1] || !r.[1] = 'x') then
+	      begin
+		colone := Some (int_of_letter (!r).[0]);
+		r := remove !r 0;
+	      end
+	    else if (is_digit !r.[0]) && (is_letter !r.[1] || !r.[1] = 'x') then
+	      begin
+		line := Some (int_of_char (!r).[0]);
+		r := remove !r 0;
+	      end
+	    else if try (is_letter !r.[0]) && (is_digit !r.[1]) && (is_letter !r.[2] || !r.[2] = 'x') with _ -> false then
+	      begin
+		colone :=  Some (int_of_letter (!r).[0]);
+		line := Some (int_of_char (!r).[1]);
+		r := remove (remove !r 0) 0;
+	      end;
+	    if !r.[0] = 'x' then begin r := remove !r 0; capture := true end;
+	    x := int_of_letter !r.[0]; y := int_of_char !r.[1];
+	    r := remove (remove !r 0) 0;
+	    if try !r.[0] = '=' && List.mem !r.[1] ['R'; 'Q'; 'B'; 'K'; 'N'] with _ -> false then 
+	      promotion := Some (piece_type_of_char (!r.[1]));
+
+	    ((!colone, !line), (!x, !y), (!piece, !promotion, !capture))
+    in
+    let pred e = function
+      | None -> true
+      | Some c -> c = e
+    in
+    let select (a, b) (a', b') = 
+      pred a' a && pred b' b
+    in
+    let cover_move = function
+      | Dep((a, b), (a', b'))
+      | Prom((a, b), (a', b'), _) 
+      | Enpassant((a, b), (a', b')) -> 
+	 ((a, b), (a', b'))
+      | _ -> raise Invalid
+    in
+    let is_promotion = function
+      | Prom(_, _, _) -> true
+      | _ -> false
+    in
+    let edit_promotion p = function
+      | Prom(d, a, _) -> Prom(d, a, p)
+      | _ -> raise Invalid
+    in
+    let l = game#get_moves true in
+      match s with
+      | "O-O"   -> Castling((4, castling_line game), (6, castling_line game)) 
+      | "O-O-O" -> Castling((4, castling_line game), (2, castling_line game)) 
+      | s ->
+	  let ((x, y), (x', y'), (piece, promotion, capture)) = parse_move s in
+	  let r = List.find (fun m -> 
+			       let d, a = cover_move m in 
+				 select (x, y) d && a = (x', y') && get_piece (game#board#get_point d) = piece && (if promotion <> None then is_promotion m else true)
+			    ) l
+	  in
+	    match promotion with
+	      | Some p -> edit_promotion p r
+	      | None -> r
 end
 ;;

@@ -17,3 +17,12 @@ let int_of_letter x =
 let letter_of_int x = "abcdefgh".[x]
 
 let is_digit c = '0' <= c && c <= '9'
+
+let castling_line game = 
+    if game#turn = White then 0 else 7
+let promotion_line game = 
+    if game#turn = White then 6 else 1
+let last_line game = 
+    if game#turn = White then 7 else 0
+
+
