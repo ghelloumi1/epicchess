@@ -128,7 +128,7 @@ let get_option = function
 
    method turn = turn
    method edit_turn = turn <- !!turn
-
+   method board = board
    method  king color = if color = White then king_w else king_b
    method castling color = if color = White then castling_w else castling_b
      
