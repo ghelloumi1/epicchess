@@ -190,26 +190,3 @@ object (self)
 	      | None -> r
 end
 ;;
-let rec loop game bw bb = 
-  Printf.printf "w : %d, b : %d \n" (List.length (bw#get_b)) (List.length (bb#get_b));
-  game#print;
-  let r = (if game#turn = White then bw else bb)#get_move game in
-    print_endline "1";
-    (if game#turn = White then bb else bw)#select_move game (get_option r);
-    print_endline "2";
-    game#move_piece (get_option r);
-    loop game bw bb
-;;
-
-
-
-let _ = 
-  let c = new chess in
-    c#init;
-    let bw = new opening in
-      bw#fill_book "book.pgn" White;
-      print_endline "file white open";
-      let bb = new opening in
-	bb#fill_book "book.pgn" Black;
-	print_endline "file black open";
-	loop c bw bb
