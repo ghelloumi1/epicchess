@@ -177,8 +177,12 @@ object (self)
       | s ->
 	  let ((x, y), (x', y'), (piece, promotion, capture)) = parse_move s in
 	  let r = List.find (fun m -> 
-			       let d, a = cover_move m in 
-				 select (x, y) d && a = (x', y') && get_piece (game#board#get_point d) = piece && (if promotion <> None then is_promotion m else true)
+			       try 
+				 let d, a = cover_move m in 
+				 select (x, y) d && a = (x', y') && 
+				 get_piece (game#board#get_point d) = piece && 
+				 (if promotion <> None then is_promotion m else true)
+			      with Invalid -> false
 			    ) l
 	  in
 	    match promotion with
@@ -190,13 +194,12 @@ let rec loop game bw bb =
   Printf.printf "w : %d, b : %d \n" (List.length (bw#get_b)) (List.length (bb#get_b));
   game#print;
   let r = (if game#turn = White then bw else bb)#get_move game in
+    print_endline "1";
     (if game#turn = White then bb else bw)#select_move game (get_option r);
+    print_endline "2";
     game#move_piece (get_option r);
     loop game bw bb
 ;;
-
-let b = new opening;;
-b#fill_book "../chess.pgn" Black;;
 
 
 
@@ -204,9 +207,9 @@ let _ =
   let c = new chess in
     c#init;
     let bw = new opening in
-      bw#fill_book "book2.pgn" White;
+      bw#fill_book "book.pgn" White;
       print_endline "file white open";
       let bb = new opening in
-	bb#fill_book "book2.pgn" Black;
+	bb#fill_book "book.pgn" Black;
 	print_endline "file black open";
 	loop c bw bb
