@@ -12,7 +12,7 @@ let xboard () =
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	let c = g#think 5 in
+	let c = g#think 5  in
 	  g#move_piece c;
 	  xboard#play c;
 	   interact()
