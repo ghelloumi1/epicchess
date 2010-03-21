@@ -3,56 +3,8 @@ open Chess
 open Opens
 open ExtendN
 
-let rec take n = function
-  | [] -> []
-  | a::b when n > 0 -> a::(take (n-1)) b
-  | _ -> []
-;;
-
-let compare_score a b = if a >> b then 1 else if a >>= b then 0 else -1;; 
-
-let rec insert e = function
-  | [] -> [e]
-  | a::l -> if fst e >>= fst a then e::a::l else a::insert e l
-;;
-  let rec alphabeta game alpha beta el prof =
-      let rec loop lmoves al bt = function
-	| [] -> 
-		lmoves
-	| (s, mvt)::tail ->
-		game#move_piece mvt;
-		let score = 
-		  if prof <= 0 || s = MInf || s = PInf then s
-		  else 
-		    let  s, _ = List.hd (alphabeta game ((--) bt) ((--) al) false (prof-1)) in (--) s
-		in
-		  game#cancel;
-		  let best = try List.hd lmoves with _ -> (MInf, Dep((0,0), (0,0))) in
-		  let n_best = if score >>= fst (best) then (score, mvt) else best in
-		  let n_alpha = if fst n_best >>= al then fst n_best else al in
-		      if n_alpha >> bt then [n_best]
-		      else
-			loop (insert (score, mvt) lmoves) n_alpha bt tail
-      in
-	(* On récupère et on trie les coups possibles *)
-      let nl = 
-	(* On trie les coups sur une profondeur de 3 *)
-	if el then 
-	  let l' = alphabeta game alpha beta false 3 in
-	    l'
-	else
-	  let l = game#get_moves false in
-	  let l' = List.map (fun mvt -> 
-			   game#move_piece mvt; 
-			   let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
-			) l in
-	     List.sort (fun (a, _) (b, _) -> compare b a) l'
-      in
-      let r = loop [] alpha beta nl in r
-   ;;
-
-
 exception Invalid_tree;;
+
 type feuille = score * dep;;
 type tree = 
   | B of tree list
@@ -166,13 +118,36 @@ let rec prolonge_tree game alpha beta n tree =
             B nl
 ;;
 
-let rec play g n nb t = 
-    if n > nb then t
+let rec play g s nb tree = 
+    if s > nb then tree
     else
-      play g (n+1) nb (prolonge_tree g MInf PInf n t)
+      play g (s+1) nb (prolonge_tree g MInf PInf s tree)
   ;;
-let rec search g n = 
-  play g 1 n (B (fst (alphabeta g MInf PInf 0)))
+let rec search g size nb tree = 
+  play g size nb tree
+;;
+
+let get_fist = function
+  | B (Node((_, d), _)::_) -> d
+  | _ -> raise Invalid_tree
+;;
+let get_move = function
+  | Node((_, d), l) -> d
+  | Leaf(_, d) -> d
+  | _ -> raise Invalid_tree
+;;
+
+(* 
+   Select a move played in the tree
+   move = None if ia is playing, else move = Some (oposment move)
+*)
+let select_move move = function
+  | B l -> 
+      (match (if move = None then List.hd else List.find (fun x -> get_move x = get_option move)) l with
+	| Node((_, d), moves) -> B moves
+	| _ -> raise Invalid_tree
+      )
+  | _ -> raise Invalid_tree
 ;;
 
 class ia = 
@@ -181,6 +156,7 @@ object (self)
   val chess_opening = new opening
   val mutable is_opening = true
   val mutable color = White
+  val mutable tree = (None, 0)
   method init c =
     color <- c;
     game#init;
@@ -188,10 +164,16 @@ object (self)
     with _ -> is_opening <- false
 
   method game = game
+  method tree = tree
   method move_piece mvt = 
     if is_opening && (game#turn <> color) then 
       (try chess_opening#select_move game mvt 
       with _ -> is_opening <- false);
+    tree <- (match tree with 
+	       | Some t, n when n > 0 ->
+		   (Some (select_move (Some mvt) t), n-1)
+	       | _ -> (None, 0));
+
     game#move_piece mvt
 
   method think n =
@@ -203,7 +185,15 @@ object (self)
 	    | Some e -> e
 	    | None -> is_opening <- false; self#think n
   method alphabeta n = 
-    snd  (List.hd (alphabeta game MInf PInf true n))
-end
-;;
+    let t, size = 
+      match tree with
+	| (Some t, s) when s > 1-> (t, s)
+	| _ -> (B (fst (alphabeta game MInf PInf 0)), 1)
 
+    in
+    let t = search game size n t in
+      print_string "ok";
+    let move = get_fist t in
+      tree <- (Some (select_move None t), n-1);
+      move
+end
