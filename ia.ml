@@ -1,7 +1,56 @@
 open Aux
 open Chess
- (* open Opens *)
+open Opens
 open ExtendN
+
+let rec take n = function
+  | [] -> []
+  | a::b when n > 0 -> a::(take (n-1)) b
+  | _ -> []
+;;
+
+let compare_score a b = if a >> b then 1 else if a >>= b then 0 else -1;; 
+
+let rec insert e = function
+  | [] -> [e]
+  | a::l -> if fst e >>= fst a then e::a::l else a::insert e l
+;;
+  let rec alphabeta game alpha beta el prof =
+      let rec loop lmoves al bt = function
+	| [] -> 
+		lmoves
+	| (s, mvt)::tail ->
+		game#move_piece mvt;
+		let score = 
+		  if prof <= 0 || s = MInf || s = PInf then s
+		  else 
+		    let  s, _ = List.hd (alphabeta game ((--) bt) ((--) al) false (prof-1)) in (--) s
+		in
+		  game#cancel;
+		  let best = try List.hd lmoves with _ -> (MInf, Dep((0,0), (0,0))) in
+		  let n_best = if score >>= fst (best) then (score, mvt) else best in
+		  let n_alpha = if fst n_best >>= al then fst n_best else al in
+		      if n_alpha >> bt then [n_best]
+		      else
+			loop (insert (score, mvt) lmoves) n_alpha bt tail
+      in
+	(* On récupère et on trie les coups possibles *)
+      let nl = 
+	(* On trie les coups sur une profondeur de 3 *)
+	if el then 
+	  let l' = alphabeta game alpha beta false 3 in
+	    l'
+	else
+	  let l = game#get_moves false in
+	  let l' = List.map (fun mvt -> 
+			   game#move_piece mvt; 
+			   let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
+			) l in
+	     List.sort (fun (a, _) (b, _) -> compare b a) l'
+      in
+      let r = loop [] alpha beta nl in r
+   ;;
+
 
 exception Invalid_tree;;
 type feuille = score * dep;;
@@ -42,114 +91,89 @@ let print_tree tree =
   in aux tree 0
 ;;
 
+
 let get_score_of_tree = function
   | Leaf (s, d) -> s
   | Node((s, d), _) -> s
   | _ -> raise Invalid_tree
-;; 
-let compare_score a b = if a >> b then 1 else if a >>= b then 0 else -1;;  
-
+;;
 let rec l_to_tree = List.map (fun x -> Leaf x);;
 
-let reduce f l = 
-  List.fold_left f (List.hd l) (List.tl l)
-;;
-
-let rec take n = function
-  | [] -> []
-  | a::b when n > 0 -> a::(take (n-1)) b
-  | _ -> []
+let rec insert e = function
+  | [] -> [e]
+  | a::l -> 
+      if get_score_of_tree e >>= get_score_of_tree a then e::a::l else a::insert e l
 ;;
 
 let rec alphabeta game alpha beta prof =
    let rec loop best al bt l = function
      | [] -> (l, best)
      | (s, mvt)::tail ->
-	  game#move_piece mvt; 
-	 let tree, s = 
-	   if prof <= 0 then (Leaf(s, mvt), s)
-	   else 
-	     let r, s = alphabeta game ((--) bt) ((--) al) (prof -1) in
-	     let s = (--) s in
-	     (Node ((s, mvt), r),  s)
-	 in
-	   game#cancel;
-	   let n_best = if s >> best then s else best in
-	   let n_alpha = if n_best >>= al then n_best else al in
-	     (* 
-		Si il y a une coupure, on renvoit le coup qui a produit la coupure, 
-		suivit des autres que l'on a déjà calculé ou que l'on ne calcule pas.
-		Il seront necessaire pour prolonger l'arbre
-	     *)
-	     if n_alpha >> bt then (tree::l@(l_to_tree tail), n_best)
-	     else loop n_best n_alpha bt (tree::l) tail
+          game#move_piece mvt; 
+         let tree, s = 
+           if prof <= 0 then (Leaf(s, mvt), s)
+           else 
+             let r, s = alphabeta game ((--) bt) ((--) al) (prof -1) in
+             let s = (--) s in
+             (Node ((s, mvt), r),  s)
+         in
+           game#cancel;
+           let n_best = if s >> best then s else best in
+           let n_alpha = if n_best >>= al then n_best else al in
+             (* 
+                Si il y a une coupure, on renvoit le coup qui a produit la coupure, 
+                suivit des autres que l'on a déjà calculé ou que l'on ne calcule pas.
+                Il seront necessaire pour prolonger l'arbre
+             *)
+             if n_alpha >> bt then (tree::l@(l_to_tree tail), n_best)
+             else loop n_best n_alpha bt (insert tree l) tail
    in
-      let l = game#get_moves true in
+      let l = game#get_moves false in
       let nl = List.map (fun mvt -> 
-			   game#move_piece mvt; 
-			   let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
-			) l in
-      let l' = take 2 (List.sort (fun (a, _) (b, _) -> compare b a) nl) in
+                           game#move_piece mvt; 
+                           let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
+                        ) l in
+      let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
       let r, s = (loop MInf alpha beta [] l') in
-      let nl = List.sort (fun a b -> compare_score (get_score_of_tree b) (get_score_of_tree a)) (List.rev r) in
-	(nl, s)
-
-;;
-
-
-
-let get_score l =  
-  let m = reduce (fun (t1, x) (t2, y) -> if x >>= y then (t1, x) else (t2, y)) l in
-    snd m
+        (r, s)
 ;;
 
 let rec prolonge_tree game alpha beta n tree = 
-  let rec loop f best al bt l  = function
-  | [] ->
-      (l, best)
-  | t::tail ->
-      let tree, s = prolonge_tree game ((--) bt) ((--) al) (n-1) t in
-      let s = f s in
-	  print_endline (string_of_score s);
-      let n_best = if s >>= best then s else best in
-      let n_alpha = if n_best >>= al then n_best else al in
-	if n_alpha >> bt then (print_string "coupure"; ([tree](*::l@tail*), n_best)) 
-	else loop f n_best n_alpha bt (tree::l) tail
+  let rec loop best al bt l = function
+    | [] ->  
+	(l, best)
+    | t::tail ->
+	let nt = prolonge_tree game ((--)bt) ((--)al) (n-1) t in
+	let s = get_score_of_tree nt in
+	let n_best = if s >>= best then s else best in
+	let n_alpha = if n_best >>= al then n_best else al in
+	  if n_alpha >> bt then  (nt::l@tail, n_best)
+	  else loop (if s >>= best then s else best) n_alpha bt (insert nt l) tail
   in
-   ( match tree with 
+  match tree with
       | Node((s, d), l) ->
-	  game#move_piece d;
-	  let l, n_score = loop  (--) MInf alpha beta [] l in
-	    game#cancel;
-	    (* On regarde le nouveau maximum de la branche *)
-	      (Node((n_score, d), l), n_score)
+          game#move_piece d;
+          let r, score = loop MInf alpha beta [] l in
+            game#cancel;
+	   Node(((--)score, d), r)
       | Leaf(s, d) ->
-	  game#move_piece d;
-	  let r, s = alphabeta game alpha beta n in
-	    game#cancel;
-	    let n_score = (--) s in
-	      (Node((n_score, d), r), n_score)
+          game#move_piece d;
+          let r, s = alphabeta game alpha beta n in
+            game#cancel;
+              Node(((--) s, d), r)
       | B l ->
-	  let l, s = loop (fun x -> x) MInf alpha beta [] l in
-	    (B l, s)
-   )
+          let nl, _ = loop MInf alpha beta [] l in
+            B nl
 ;;
 
- let g = new chess;;
- g#init;;
- let l, s = alphabeta g MInf PInf 2;;
- 
-print_tree (B l);;
-let t, r = (prolonge_tree g MInf PInf 4 (B l));; 
- print_tree t;;
-
-let t = List.nth l 1;;
- print_tree t;;
-
-let tr, s = prolonge_tree g MInf PInf 2 t;;
- print_tree tr;;
- let tr', s' = prolonge_tree g 5 tr;;
- print_tree tr';;
+let rec play g n nb t = 
+    if n > nb then t
+    else
+      play g (n+1) nb (prolonge_tree g MInf PInf n t)
+  ;;
+let rec search g n = 
+  play g 1 n (B (fst (alphabeta g MInf PInf 0)))
+;;
 
 class ia = 
 object (self)
@@ -179,43 +203,7 @@ object (self)
 	    | Some e -> e
 	    | None -> is_opening <- false; self#think n
   method alphabeta n = 
-    let rec alphabeta game alpha beta ck prof =
-      let rec loop best al bt = function
-	| [] -> 
-	    let sb, cb = best in
-	      (* Si on a perdu dans tous les cas *)
-	      if sb = MInf then 
-		let lm = game#get_moves true in
-		  if lm <> [] then (MInf, List.hd lm)
-		  else
-		    if game#is_check (game#king (game#turn)) then best
-		    else
-		      (* Si il y a pat *)
-		      (N 0, cb)
-	      else
-		best
-	| (s, mvt)::tail ->
-		game#move_piece mvt;
-		let score = 
-		  if prof = 0 || s = MInf || s = PInf then s
-		  else let  s, _ = alphabeta game ((--) bt) ((--) al) false (prof-1) in (--) s
-		in
-		  game#cancel;
-		    let n_best = if score >>= (fst best) then (score, mvt) else best in
-		    let n_alpha = if fst n_best >>= al then fst n_best else al in
-		      if n_alpha >> bt then n_best
-		      else
-			loop n_best n_alpha bt tail
-      in
-	(* On récupère et on trie les coups possibles *)
-      let l = game#get_moves ck in
-      let nl = List.map (fun mvt -> 
-			   game#move_piece mvt; 
-			   let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
-			) l in
-      let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
-	loop (MInf, Dep((0,0), (0,0))) alpha beta l'
-    in snd (alphabeta game MInf PInf true n)
+    snd  (List.hd (alphabeta game MInf PInf true n))
 end
 ;;
 
