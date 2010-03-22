@@ -118,15 +118,11 @@ let rec prolonge_tree game alpha beta n tree =
             B nl
 ;;
 
-let rec play g s nb tree = 
+let rec play game s nb tree = 
     if s > nb then tree
     else
-      play g (s+1) nb (prolonge_tree g MInf PInf s tree)
+      play game (s+1) nb (prolonge_tree game MInf PInf s tree)
   ;;
-let rec search g size nb tree = 
-  play g size nb tree
-;;
-
 let get_fist = function
   | B (Node((_, d), _)::_) -> d
   | _ -> raise Invalid_tree
@@ -169,7 +165,9 @@ object (self)
     if is_opening && (game#turn <> color) then 
       (try chess_opening#select_move game mvt 
       with _ -> is_opening <- false);
-    tree <- (match tree with 
+
+    if game#turn <> color then 
+      tree <- (match tree with 
 	       | Some t, n when n > 0 ->
 		   (Some (select_move (Some mvt) t), n-1)
 	       | _ -> (None, 0));
@@ -191,8 +189,7 @@ object (self)
 	| _ -> (B (fst (alphabeta game MInf PInf 0)), 1)
 
     in
-    let t = search game size n t in
-      print_string "ok";
+    let t = play game size n t in
     let move = get_fist t in
       tree <- (Some (select_move None t), n-1);
       move
