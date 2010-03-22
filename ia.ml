@@ -152,7 +152,6 @@ object (self)
   val chess_opening = new opening
   val mutable is_opening = true
   val mutable color = White
-  val mutable tree = (None, 0)
   method init c =
     color <- c;
     game#init;
@@ -160,17 +159,10 @@ object (self)
     with _ -> is_opening <- false
 
   method game = game
-  method tree = tree
   method move_piece mvt = 
     if is_opening && (game#turn <> color) then 
       (try chess_opening#select_move game mvt 
       with _ -> is_opening <- false);
-
-    if game#turn <> color then 
-      tree <- (match tree with 
-	       | Some t, n when n > 0 ->
-		   (Some (select_move (Some mvt) t), n-1)
-	       | _ -> (None, 0));
 
     game#move_piece mvt
 
@@ -183,14 +175,7 @@ object (self)
 	    | Some e -> e
 	    | None -> is_opening <- false; self#think n
   method alphabeta n = 
-    let t, size = 
-      match tree with
-	| (Some t, s) when s > 1-> (t, s)
-	| _ -> (B (fst (alphabeta game MInf PInf 0)), 1)
-
-    in
-    let t = play game size n t in
-    let move = get_fist t in
-      tree <- (Some (select_move None t), n-1);
-      move
+    let t = B (fst (alphabeta game MInf PInf 0)) in
+    let tree = play game 1 n t in
+    get_fist tree
 end
