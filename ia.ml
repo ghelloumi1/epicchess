@@ -59,7 +59,17 @@ let rec insert e = function
 
 let rec alphabeta game alpha beta prof =
    let rec loop best al bt l = function
-     | [] -> (l, best)
+     | [] ->
+        if best = MInf then
+	  let lm = game#get_moves true in 
+	    if lm <> [] then ([Leaf(MInf, (List.hd lm))], MInf)
+	    else 
+             if game#is_check (game#king (game#turn)) then ([], MInf)
+             else
+               (* Si il y a pat *)
+               ([], N 0)
+	else
+	  (l, best)
      | (s, mvt)::tail ->
           game#move_piece mvt; 
          let tree, s = 
@@ -78,7 +88,7 @@ let rec alphabeta game alpha beta prof =
                 Il seront necessaire pour prolonger l'arbre
              *)
              if n_alpha >> bt then (tree::l@(l_to_tree tail), n_best)
-             else loop n_best n_alpha bt (insert tree l) tail
+             else loop n_best n_alpha bt (if s >> MInf then insert tree l else l) tail
    in
       let l = game#get_moves false in
       let nl = List.map (fun mvt -> 
