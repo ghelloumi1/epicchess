@@ -128,11 +128,6 @@ let rec prolonge_tree game alpha beta n tree =
             B nl
 ;;
 
-let rec play game s nb tree = 
-    if s > nb then tree
-    else
-      play game (s+1) nb (prolonge_tree game MInf PInf s tree)
-  ;;
 let get_fist = function
   | B (Node((_, d), _)::_) -> d
   | _ -> raise Invalid_tree
@@ -184,8 +179,16 @@ object (self)
 	  match chess_opening#get_move game with
 	    | Some e -> e
 	    | None -> is_opening <- false; self#think n
-  method alphabeta n = 
-    let t = B (fst (alphabeta game MInf PInf 0)) in
-    let tree = play game 1 n t in
-    get_fist tree
+  method alphabeta time = 
+    let check_timer a = Unix.time() -. a < float_of_int (time) in
+    let t = Unix.time() in
+    let rec play game level tree = 
+      Printf.printf "#%d\n" level;
+      if not (check_timer t) then tree
+      else
+	play game (level+1) (prolonge_tree game MInf PInf level tree)
+    in
+    let tree = B (fst (alphabeta game MInf PInf 0)) in
+    let tree' = play game 1 tree in
+    get_fist tree'
 end
