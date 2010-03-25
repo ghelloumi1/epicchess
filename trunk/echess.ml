@@ -12,7 +12,7 @@ let xboard () =
     let xboard = new xboard in
       xboard#init;
       let rec think () = 
-	let c = g#think 4 in
+	let c = g#think 2 in
 	  g#move_piece c;
 	  xboard#play c;
 	   interact()
@@ -34,7 +34,7 @@ let xboard () =
 	interact()
 ;;
 let debug () = 
-  let prof = ref 6 in
+  let prof = ref 2 in
   let scan_move s = Scanf.sscanf s "%d,%d:%d,%d" (fun a b c d-> ((a,b), (c, d))) in
   let scan_prof s = Scanf.sscanf s "p:%d" (fun p -> p) in
   let rec loop g = 
