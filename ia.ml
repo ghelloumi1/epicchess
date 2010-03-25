@@ -44,6 +44,14 @@ let print_tree tree =
 ;;
 
 
+
+let rec take n = function
+  | [] -> []
+  | a::b when n > 0 -> a::(take (n-1)) b
+  | _ -> []
+;;
+
+
 let get_score_of_tree = function
   | Leaf (s, d) -> s
   | Node((s, d), _) -> s
@@ -57,6 +65,8 @@ let rec insert e = function
       if get_score_of_tree e >>= get_score_of_tree a then e::a::l else a::insert e l
 ;;
 
+let nb = ref 0;;
+let coupures = ref 0;;
 let rec alphabeta game alpha beta prof =
    let rec loop best al bt l = function
      | [] ->
@@ -71,7 +81,8 @@ let rec alphabeta game alpha beta prof =
 	else
 	  (l, best)
      | (s, mvt)::tail ->
-          game#move_piece mvt; 
+         game#move_piece mvt; 
+	 nb := !nb+1;
          let tree, s = 
            if prof <= 0 then (Leaf(s, mvt), s)
            else 
@@ -87,15 +98,15 @@ let rec alphabeta game alpha beta prof =
                 suivit des autres que l'on a déjà calculé ou que l'on ne calcule pas.
                 Il seront necessaire pour prolonger l'arbre
              *)
-             if n_alpha >> bt then (tree::l@(l_to_tree tail), n_best)
+             if n_alpha >> bt then (coupures := !coupures +1; (tree::l@(l_to_tree tail), n_best))
              else loop n_best n_alpha bt (if s >> MInf then insert tree l else l) tail
    in
       let l = game#get_moves false in
-      let nl = List.map (fun mvt -> 
+      let nl= List.map (fun mvt -> 
                            game#move_piece mvt; 
                            let s = game#eval !!(game#turn) in game#cancel; (s, mvt)
                         ) l in
-      let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
+     let l' = List.sort (fun (a, _) (b, _) -> compare b a) nl in
       let r, s = (loop MInf alpha beta [] l') in
         (r, s)
 ;;
@@ -109,7 +120,7 @@ let rec prolonge_tree game alpha beta n tree =
 	let s = get_score_of_tree nt in
 	let n_best = if s >>= best then s else best in
 	let n_alpha = if n_best >>= al then n_best else al in
-	  if n_alpha >> bt then  (nt::l@tail, n_best)
+	  if n_alpha >> bt then  (coupures := !coupures+1; (nt::l@tail, n_best))
 	  else loop (if s >>= best then s else best) n_alpha bt (insert nt l) tail
   in
   match tree with
@@ -150,7 +161,6 @@ let select_move move = function
       )
   | _ -> raise Invalid_tree
 ;;
-
 class ia = 
 object (self)
   val game = new chess
@@ -182,13 +192,17 @@ object (self)
   method alphabeta time = 
     let check_timer a = Unix.time() -. a < float_of_int (time) in
     let t = Unix.time() in
-    let rec play game level tree = 
-      Printf.printf "#%d\n" level;
-      if not (check_timer t) then tree
+    let rec play game t level tree = 
+      if not (check_timer t) then (tree, level)
       else
-	play game (level+1) (prolonge_tree game MInf PInf level tree)
+	play game t (level+1) (prolonge_tree game MInf PInf level tree)
     in
     let tree = B (fst (alphabeta game MInf PInf 0)) in
-    let tree' = play game 1 tree in
+    let tree',_ =  (match play game t 1 tree with
+	| (B l), lvl ->
+	    let t = Unix.time() in
+	    play game t lvl  (B (take 5 l))
+	| _ -> raise Invalid_tree)
+    in
     get_fist tree'
 end
