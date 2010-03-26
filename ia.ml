@@ -10,6 +10,7 @@ type tree =
   | B of tree list
   | Node of feuille * tree list
   | Leaf of feuille
+  | End of score
 ;;
 
 let string_of_tuple (a, b) = 
@@ -39,6 +40,8 @@ let print_tree tree =
       List.iter (fun t -> aux t (n+1)) l
   | B l ->
       List.iter (fun t -> aux t (n+1)) l
+  | End score ->
+      indent n; print_string (string_of_score score)
 
   in aux tree 0
 ;;
@@ -53,6 +56,7 @@ let rec take n = function
 
 
 let get_score_of_tree = function
+  | End s -> s
   | Leaf (s, d) -> s
   | Node((s, d), _) -> s
   | _ -> raise Invalid_tree
@@ -65,8 +69,6 @@ let rec insert e = function
       if get_score_of_tree e >>= get_score_of_tree a then e::a::l else a::insert e l
 ;;
 
-let nb = ref 0;;
-let coupures = ref 0;;
 let rec alphabeta game alpha beta prof =
    let rec loop best al bt l = function
      | [] ->
@@ -74,32 +76,33 @@ let rec alphabeta game alpha beta prof =
 	  let lm = game#get_moves true in 
 	    if lm <> [] then ([Leaf(MInf, (List.hd lm))], MInf)
 	    else 
-             if game#is_check (game#king (game#turn)) then ([], MInf)
+             if game#is_check (game#king (game#turn)) then ([End MInf], MInf)
              else
                (* Si il y a pat *)
-               ([], N 0)
+               ([End (N 0)], N 0)
 	else
 	  (l, best)
      | (s, mvt)::tail ->
          game#move_piece mvt; 
-	 nb := !nb+1;
          let tree, s = 
-           if prof <= 0 then (Leaf(s, mvt), s)
+           if prof <= 0 || s = PInf then (Leaf(s, mvt), s)
            else 
              let r, s = alphabeta game ((--) bt) ((--) al) (prof -1) in
              let s = (--) s in
              (Node ((s, mvt), r),  s)
          in
            game#cancel;
-           let n_best = if s >> best then s else best in
-           let n_alpha = if n_best >>= al then n_best else al in
-             (* 
-                Si il y a une coupure, on renvoit le coup qui a produit la coupure, 
-                suivit des autres que l'on a déjà calculé ou que l'on ne calcule pas.
-                Il seront necessaire pour prolonger l'arbre
-             *)
-             if n_alpha >> bt then (coupures := !coupures +1; (tree::l@(l_to_tree tail), n_best))
-             else loop n_best n_alpha bt (if s >> MInf then insert tree l else l) tail
+	   if s = PInf then ([tree], PInf)
+	   else
+             let n_best = if s >> best then s else best in
+             let n_alpha = if n_best >>= al then n_best else al in
+               (* 
+                  Si il y a une coupure, on renvoit le coup qui a produit la coupure, 
+                  suivit des autres que l'on a déjà calculé ou que l'on ne calcule pas.
+                  Il seront necessaire pour prolonger l'arbre
+               *)
+               if n_alpha >> bt then (tree::l@(l_to_tree tail), n_best)
+               else loop n_best n_alpha bt (if s >> MInf then insert tree l else l) tail
    in
       let l = game#get_moves false in
       let nl= List.map (fun mvt -> 
@@ -120,7 +123,7 @@ let rec prolonge_tree game alpha beta n tree =
 	let s = get_score_of_tree nt in
 	let n_best = if s >>= best then s else best in
 	let n_alpha = if n_best >>= al then n_best else al in
-	  if n_alpha >> bt then  (coupures := !coupures+1; (nt::l@tail, n_best))
+	  if n_alpha >> bt then (nt::l@tail, n_best)
 	  else loop (if s >>= best then s else best) n_alpha bt (insert nt l) tail
   in
   match tree with
@@ -134,6 +137,7 @@ let rec prolonge_tree game alpha beta n tree =
           let r, s = alphabeta game alpha beta n in
             game#cancel;
               Node(((--) s, d), r)
+      | End score -> End score
       | B l ->
           let nl, _ = loop MInf alpha beta [] l in
             B nl
@@ -201,7 +205,7 @@ object (self)
     let tree',_ =  (match play game t 1 tree with
 	| (B l), lvl ->
 	    let t = Unix.time() in
-	    play game t lvl  (B (take 5 l))
+	    play game t lvl  (B (take 4 l))
 	| _ -> raise Invalid_tree)
     in
     get_fist tree'
